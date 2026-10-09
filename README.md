@@ -111,7 +111,7 @@ $env:PYTHONUTF8 = '1'
 
 ## 在其他工作场所开发
 
-源码仓库：[blank-art-spec/investment-dashboard](https://github.com/blank-art-spec/investment-dashboard)。仓库为私有，克隆前使用有访问权限的 GitHub 账号登录。
+源码仓库：[blank-art-spec/investment-dashboard](https://github.com/blank-art-spec/investment-dashboard)。仓库为公开，可直接克隆；推送修改需要仓库写入权限。
 
 ```powershell
 git clone https://github.com/blank-art-spec/investment-dashboard.git
@@ -131,4 +131,4 @@ cd investment-dashboard
 以及 [Alfred 投资仪表盘](https://github.com/Fournierp/alfred)，仅借鉴目录与说明组织，没有复制其业务代码。
 布局取舍可阅读 [PyPA：src 与平铺布局](https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/)。
 
-当前尚未指定开源许可证。仓库使用私有可见性，不配置自动编译或自动启动业务服务的流程。
+当前尚未指定开源许可证。仓库使用公开可见性，不配置自动编译或自动启动业务服务的流程。

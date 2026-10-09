@@ -1,10 +1,10 @@
 # 跨电脑开发说明
 
-仓库：[blank-art-spec/investment-dashboard](https://github.com/blank-art-spec/investment-dashboard)，默认分支 `main`，私有可见性。
+仓库：[blank-art-spec/investment-dashboard](https://github.com/blank-art-spec/investment-dashboard)，默认分支 `main`，公开可见性。
 
 ## 第一次克隆
 
-在有仓库访问权限的 GitHub 账号下执行：
+安装 Git 后可直接执行以下命令克隆公开源码：
 
 ```powershell
 git clone https://github.com/blank-art-spec/investment-dashboard.git
