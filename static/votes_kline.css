@@ -1,0 +1,59 @@
+/* -*- coding: utf-8 -*- */
+/* 「日K + 大V判断圆点 + 点圆点浮卡」的样式 —— 唯一一份。
+   两处共用: 寻找机会→判断校验(取值由 static/style.css 的 :root 提供)
+             个股详情→个股K线·大V观点(取值由 static/detail/style.css 的 :root 提供)
+   组件本体在 static/votes_kline.js。改这里两边同时生效 —— 别在页面样式里再写一份。
+
+   取色全走 --vk-* 令牌, 各页在自己的 :root 里映射一次(两张页面的主题变量名不同),
+   所以外观各随主题、结构只有一套。令牌都带兜底值, 单看这个文件也不会裸奔。
+
+   2026-09-29 统一前: 判断校验那份是 pointer-events:none + 鼠标离开画布就收卡, 于是"点开了也滚不动、
+   读不到被截断的下几条、连 ✕ 都点不到"; 个股那份才是想要的形式(点开钉住、卡内可滚、带 ✕)。
+   现在以个股那份为准, 两边一致。 */
+
+/* 右上角逐条(涨跌幅 + 开收高低): 悬停任意蜡烛时显示, 离开回到最新一根 */
+.jline-ohlc{
+  position:absolute;top:var(--vk-ohlc-top,8px);right:var(--vk-ohlc-right,34px);z-index:var(--vk-ohlc-z,5);
+  display:none;min-width:var(--vk-ohlc-minw,0);padding:var(--vk-ohlc-pad,0);
+  background:var(--vk-ohlc-bg,none);border:var(--vk-ohlc-bd,none);border-radius:8px;
+  text-align:right;font-size:12px;line-height:1.5;pointer-events:none;
+  font-variant-numeric:tabular-nums;
+}
+.jline-ohlc .jm-d{display:flex;gap:10px;align-items:baseline;justify-content:flex-end}
+.jline-ohlc .jm-dt{color:var(--vk-tx3,#98a1ab);font-size:11px}
+.jline-ohlc .jm-ch{font-weight:700;font-size:var(--vk-ohlc-chsize,inherit)}
+.jline-ohlc .jm-ch.up{color:var(--vk-up,#d9382e)}
+.jline-ohlc .jm-ch.down{color:var(--vk-down,#1a9e5c)}
+.jline-ohlc .jm-ch.flat{color:var(--vk-tx3,#98a1ab)}
+.jline-ohlc .jm-oh{color:var(--vk-tx2,#5c6570);font-size:11px;white-space:nowrap}
+
+/* 点大V圆点浮出的当日意见卡 —— **点开钉住**(移开鼠标不消失, 见 votes_kline.js 的 onLeave),
+   所以要能自己滚、自己关: overscroll-behavior 挡住"滚到底顺手把整页拖走"。
+   ⛔ 不要加 pointer-events:none —— 加了就既不能滚、也点不到 ✕ */
+.jline-pop{
+  position:absolute;z-index:var(--vk-pop-z,40);display:none;
+  min-width:220px;max-width:360px;max-height:var(--vk-pop-max-h,260px);
+  overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;
+  background:var(--vk-pop-bg,#fff);border:1px solid var(--vk-pop-line,#e7ecf3);
+  border-radius:10px;box-shadow:var(--vk-pop-shadow,0 4px 14px rgba(20,40,80,.08));
+  padding:9px 10px;color:var(--vk-tx,inherit);
+  font-size:var(--vk-pop-font,inherit);line-height:var(--vk-pop-lh,1.5);
+}
+.jline-pop .jlp-head{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+.jline-pop .jlp-head b{font-size:13px;color:var(--vk-tx,inherit)}
+.jline-pop .jlp-head .sub{font-size:11px;color:var(--vk-tx3,#98a1ab)}
+.jline-pop .jlp-x{
+  margin-left:auto;align-self:flex-start;border:0;background:none;color:var(--vk-tx3,#98a1ab);
+  font-size:13px;line-height:1;padding:2px 3px;cursor:pointer;border-radius:5px;
+}
+.jline-pop .jlp-x:hover{color:var(--vk-tx,inherit);background:var(--vk-soft,transparent)}
+.jline-pop .jlp-note{display:block;font-size:10px;color:var(--vk-note,var(--vk-tx3,#98a1ab));margin:2px 0 6px;cursor:help}
+.jline-pop .jlp-row{
+  display:grid;grid-template-columns:46px 1fr auto;gap:8px;align-items:baseline;
+  padding:5px 0;border-bottom:1px solid var(--vk-rowline,#e7ecf3);
+}
+.jline-pop .jlp-row:last-child{border-bottom:none}
+.jline-pop .jlp-d{color:var(--vk-tx3,#98a1ab);font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.jline-pop .jlp-v{font-weight:600;font-size:12px;color:var(--vk-tx,inherit);white-space:nowrap}
+.jline-pop .jlp-b{display:inline-flex;gap:4px;flex-wrap:wrap}
+.jline-pop .jlp-t{grid-column:2/4;color:var(--vk-tx2,#5c6570);font-size:12px;line-height:1.5;word-break:break-word}

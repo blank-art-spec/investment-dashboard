@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>个股持仓详情</title>
+<!-- 首屏定主题(2026-09-22 并入主程序时加): 主面板默认**深色**(settings.json 的 theme, 缺省 dark),
+     而本页是独立文档、读不到主面板的 SETTINGS —— 由打开它的链接带 ?theme=dark|light 过来
+     (见 static/app.js 的 openStockDetail)。必须内联且排在样式表**之前**, 否则会先闪一帧浅色。 -->
+<script>
+(function () {
+  var t = "dark";
+  try { t = new URLSearchParams(location.search).get("theme") || "dark"; } catch (e) {}
+  document.documentElement.classList.add(t === "light" ? "theme-light" : "theme-dark");
+  document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
+})();
+</script>
+<!-- ?v= 是缓存闸: 这份 CSS 以前没带版本号, 改了样式浏览器可能还给旧的那份(2026-09-26 补上)。 -->
+<link rel="stylesheet" href="/static/detail/style.css?v=20260930C">
+<!-- K线·大V圆点共用组件(2026-09-29): 与主面板「寻找机会→判断校验」同一份实现/样式 —— 以前这里是
+     那块的拷贝, 两边各修各的, 于是判断校验那边坏了一直没跟着修。CSS 排在 detail/style.css 之后
+     (让 --vk-* 令牌生效), JS 排在 detail/app.js 之前(本页全是 defer, 顺序即执行顺序)。 -->
+<link rel="stylesheet" href="/static/votes_kline.css?v=20260930C">
+<link rel="icon" type="image/png" sizes="128x128" href="/static/favicon.png?v=20260929C">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v=20260929C">
+<!-- K 线(2026-09-23 搬判断校验的蜡烛图): 顺序须与主面板一致 luxon → chart → adapter → financial。
+     defer(2026-09-27): 这 4 个库合计 ~300KB, 同步下载会挡住首帧。
+     ⚠️ 本页的 /static/detail/app.js 在 </body> 前, 所以它**也必须**一起 defer ——
+     否则 defer 的库要等解析结束才执行, 而 app.js 在解析途中就跑了 ⇒ 它里面的
+     `if (typeof Chart === "undefined") return;` 会静默把 K 线整块跳过。
+     defer 保证"按书写顺序、在解析完成后、DOMContentLoaded 之前"执行, 顺序与语义都没变。 -->
+<script defer src="/static/vendor/luxon.min.js"></script>
+<script defer src="/static/vendor/chart.umd.min.js"></script>
+<script defer src="/static/vendor/chartjs-adapter-luxon.umd.min.js"></script>
+<script defer src="/static/vendor/chartjs-chart-financial.min.js"></script>
+</head>
+<body>
+<div class="app">
+  <!-- ======= 顶栏 ======= -->
+  <header class="topbar">
+    <div class="lhs">
+      <a class="backlink" href="/" title="回到投资面板">&larr;</a>
+      <!-- 标的名称直接写进这块深色底(2026-09-24 用户口径), 不再另挂一个"个股详情"的空标题;
+           取不到名字时(加载中/失败)回落到"个股详情" —— 这块底同时是本页的身份标识 -->
+      <div class="logo" id="symLogo">个股详情</div>
+      <h1 class="title" id="symTitle">加载中… <span class="sub"></span></h1>
+      <!-- 近期事件芯片(2026-09-30 用户口径): 挂在「600595 · A股」这一串的**右边**。
+           放在 h1 **外面**: #symTitle 是整块 innerHTML 重写的, 塞进去会被下次刷新抹掉。
+           数据来自 /api/detail/... 的 events 字段(后端只读 data/events.json, 刷新在收盘准备里)。
+           这一格**一次只放一条、8 秒换一条**(与首页模块栏那格同一套轮播做法, 见 app.js 的
+           renderSymEvents) —— 用户口径: 两条并排太丑。 -->
+      <span class="ev-chip" id="symEv" hidden></span>
+    </div>
+    <div class="meta" id="metaLine">
+      <div class="ml-price"><span class="ml-k">现价</span><b id="mPrice">–</b></div>
+      <div class="ml-item"><span class="ml-k">盈亏</span><b id="mPnl">–</b></div>
+      <div class="ml-item"><span class="ml-k">仓位</span><b id="mW">–</b></div>
+      <div class="ml-item"><span class="ml-k">综合 S</span><b id="mS">–</b></div>
+      <div class="score-chip-set" id="mDims">
+        <span class="chip" data-k="F"><i>F</i><b id="mF">–</b></span>
+        <span class="chip" data-k="T"><i>T</i><b id="mT">–</b></span>
+        <span class="chip" data-k="P"><i>P</i><b id="mP">–</b></span>
+        <span class="chip" data-k="V"><i>V</i><b id="mV">–</b></span>
+      </div>
+      <button class="rbtn" id="btnRefresh" title="刷新行情" aria-label="刷新行情">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ======= 个股 K 线 + 大V观点(2026-09-23) =======
+       放在「个股信息」与「五个维度页签」之间 —— 全页签可见, 不随切页隐藏。
+       蜡烛图 + MA + 大V圆点(红看多/绿看空/黄提及/空心持续); 点圆点弹当日发言。 -->
+  <section class="kline-band">
+    <div class="panel">
+      <div class="panel-h">
+        <span>个股 K 线 · 大V观点</span>
+        <span class="hint" id="vkHint"></span>
+      </div>
+      <div class="chartbox vk-wrap" id="votesKlineWrap"></div>
+    </div>
+  </section>
+
+  <!-- ======= 页签 ======= -->
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="fund">基本面 <span class="tnum">①</span></button>
+    <button class="tab" data-tab="tech">技术面 <span class="tnum">②</span></button>
+    <button class="tab" data-tab="votes">大V判断 <span class="tnum">③</span></button>
+    <button class="tab" data-tab="bt">量化回测 <span class="tnum">④</span></button>
+    <button class="tab" data-tab="rpt">研报 <span class="tnum">⑤</span></button>
+  </nav>
+
+  <main class="body">
+    <!-- ======= ① 基本面(左) + 财务预测(右, 2026-09-24) =======
+         左列还是模块1 那份 F(基于**已披露**财报)。右列「财务预测」是用户 2026-09-24 指出的那个
+         大 BUG 的应对: 基本面吃的是历史报表, 慢一拍 —— 于是用利润表多期数据前瞻一年, 按**同一套
+         分档表**把「估值/成长」重算成对照分 F′。
+         ⚠️ F′ 永远只是影子分, **不进模块1 的评分与建议**。
+         (2026-09-26 用户口径: 原来那个"AI 复核可信度 >70% 就把基本面分数换成预测口径"的开关
+          已整体删除 —— 所以左列 F 不再有第二套口径, 这里也就不需要"这一维用的哪套口径"的角标了。)
+         数据与算法在 dash_core/forecast.py, 前端一次 GET /api/forecast/<market>/<symbol> 拿全。 -->
+    <section class="pane" id="pane-fund">
+      <div class="split2">
+        <div class="col">
+          <div class="scorehead">
+            <div class="big" id="fundScore">–</div>
+            <div class="cap">基本面分 <b>F</b></div>
+            <div class="note" id="fundNote"></div>
+          </div>
+          <div id="fundDims" class="dims"></div>
+        </div>
+        <div class="col fc-col" id="fcCol">
+          <div class="scorehead sm">
+            <div class="big" id="fcScore">–</div>
+            <div class="cap">财务预测 <b>F′</b><span class="fc-tag" id="fcTag">影子对照</span></div>
+            <div class="note" id="fcNote"></div>
+          </div>
+          <div id="fcBody"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======= ② 技术面 ======= -->
+    <section class="pane" id="pane-tech" hidden>
+      <div class="scorehead">
+        <div class="big" id="techScore">–</div>
+        <div class="cap">技术面分 <b>T</b></div>
+        <div class="note" id="techNote"></div>
+      </div>
+      <div id="techDims" class="dims"></div>
+    </section>
+
+    <!-- ======= ③ 大V判断 ======= -->
+    <section class="pane" id="pane-votes" hidden>
+      <!-- 「大V净看空」风控提示(2026-09-25 用户口径: 只要大V净看空, **不影响评分**, 但禁止建仓/建议清仓)。
+           显隐与文案全部由 detail/app.js 按后端 votes.net_bear 控制; 判据只在后端一处(advice.py: V 有值且 < 50)。 -->
+      <div class="netbear-banner" id="votesNetBear" hidden></div>
+      <div class="split2">
+        <div class="col">
+          <div class="scorehead sm">
+            <div class="big" id="votesScore">–</div>
+            <div class="cap">大V判断分 <b>V</b></div>
+            <div class="note" id="votesNote"></div>
+          </div>
+          <div id="votesDims" class="dims"></div>
+        </div>
+        <div class="col">
+          <div class="scorehead sm">
+            <div class="big" id="comboScore">–</div>
+            <div class="cap">组合整体性 <b>P</b></div>
+            <div class="note" id="comboNote"></div>
+          </div>
+          <div id="comboDims" class="dims"></div>
+        </div>
+      </div>
+      <!-- 「大V vs 小V · 预期差」那张卡与整个「④近期舆情」页签已于 2026-09-25 删除
+           (用户口径: 小V看法、舆情信息没啥用)。**删的只有前端展示**:
+           后端 `/api/detail/vv/…`(dash_core/vv_spread.py)、讨论区抓取(`/api/detail/sentiment/…`,
+           xq_stock.py + _xq_stock_worker.py) 一行没动, 以后要复用直接把它接回来。
+           ④量化回测 那边的舆情入口(权重框/重抓按钮/舆情每日分图)同日一并撤了 —— 前端恒发 sent_w=0,
+           后端的舆情分支与 `force_sent` 参数照旧留着, 接回一个输入框就能用。 -->
+    </section>
+
+    <!-- ======= ④ 量化回测 ======= -->
+    <section class="pane" id="pane-bt" hidden>
+      <div class="toolbar">
+        <div class="grp">
+          <span class="gcap" title="F/T/P/V 四维按比例归一; 市场面 M 不进个股分。默认值 = 主程序模块1 的落盘口径(当前冻结 F主导 70/10/10/10), 改了只影响这一次回测">权重</span>
+          <label title="基本面">F <input id="btWf" type="number" min="0" max="100" step="1" value="70"></label>
+          <label title="技术面">T <input id="btWt" type="number" min="0" max="100" step="1" value="10"></label>
+          <label title="组合整体性">P <input id="btWp" type="number" min="0" max="100" step="1" value="10"></label>
+          <label title="大V判断">V <input id="btWv" type="number" min="0" max="100" step="1" value="10"></label>
+          <!-- 生效口径(权重/最低持有分数/只数/单只上下限/费率)与主程序模块1、模块5 **同一份真源**;
+               显示行由 detail/app.js 的 applyBtParams() 按后端回传的 bt_params 渲染(2026-09-26 复核第 6 条:
+               详情页原来写死 30/20/15/20 + 费率 0 + 四个门槛一个都不传)。 -->
+          <span class="hint" id="btAutoHint" title="与主程序模块1 / 模块5 同一份口径">与主程序同源</span>
+          <!-- 「舆情」权重框与「重抓舆情」按钮已于 2026-09-25 删除(用户: 舆情信息没啥用, 还害得 F/T/P/V
+               回测被"舆情覆盖天不足"挡死)。前端现在恒发 sent_w=0 ⇒ 后端不抓雪球、也不按覆盖度裁窗口。 -->
+        </div>
+        <div class="grp">
+          <label title="留空 = 按市场自动扣(A股 10 / 港股 20 / 美股 15 bp), 买卖各扣一次; 填了数字 = 三个市场都按这个数">费率(bp) <input id="btFee" type="number" min="0" step="1" placeholder="自动"></label>
+          <label>样本池
+            <select id="btPool">
+              <option value="watch" selected>账户全池(主引擎)</option>
+              <option value="only">仅该标的</option>
+            </select>
+          </label>
+          <button id="btBtn" class="btn primary">运行回测</button>
+        </div>
+        <div class="status" id="btStatus"></div>
+      </div>
+
+      <div class="bt-kpis" id="btResult"></div>
+      <div class="panel">
+        <div class="panel-h"><span>净值曲线</span><span class="hint">实线=策略 · 虚线=同期全仓持有 · T-1 收盘打分 → T 开盘成交 · 单只口径只画「首买→末清」这段</span></div>
+        <div class="chartbox"><canvas id="btChart" width="1000" height="300"></canvas></div>
+      </div>
+    </section>
+
+    <!-- ======= ⑤ 研报(2026-09-24) =======
+         版式顺序(2026-09-24 用户口径): 工具条 → 设置(收起的) → 信息卡 → 风险要点 → 目录+正文 →
+         ①最新机构研报(收起的)。
+         ⛔ 机构研报排**正文之后**: 放前面会把本地那份报告的正文拦腰截断(用户实测反馈"把投资价值
+            分析报告分割开了")。
+         ⛔ 定时更新/间隔/范围收进「设置」按钮里, 别默认铺在正文上方。
+         ⛔ 文案只说一次: 文件名/更新时间/篇幅只在信息卡里出现, 状态行(#rptStatus)只报"正在做什么/出错"。
+         左目录 + 右正文: 正文由后端把 会话根/研报/*.md 渲染成 HTML 下发(见 dash_core/report.py)。
+         AI 更新是**整篇重写**(几分钟), 所以按钮点了以后走后台线程 + 轮询, 关页面也不影响。 -->
+    <section class="pane" id="pane-rpt" hidden>
+      <div class="toolbar">
+        <div class="grp">
+          <button id="rptAi" class="btn primary" title="调系统设置里的 AI, 按原报告框架用最新数据重写整篇">AI 更新</button>
+          <button id="rptReload" class="btn ghost" title="跳过缓存重读磁盘上的 md">重读文件</button>
+          <a id="rptRaw" class="btn ghost" target="_blank" rel="noopener"
+             title="直接打开这份 md 原文">打开源文件</a>
+          <button id="rptRestore" class="btn ghost" hidden
+                  title="用最近一次 AI 更新前的备份覆盖当前文件">回滚上一版</button>
+          <button id="rptCfgBtn" class="btn ghost" aria-expanded="false"
+                  title="定时更新 / 间隔 / 范围">设置</button>
+        </div>
+        <div class="status" id="rptStatus"></div>
+      </div>
+
+      <div class="rpt-cfg" id="rptCfg" hidden>
+        <div class="rpt-auto" id="rptAuto"></div>
+      </div>
+
+      <div class="rpt-head" id="rptHead"></div>
+
+      <details class="rpt-risks" id="rptRiskBox" hidden>
+        <summary>风险要点 <span class="hint" id="rptRiskN"></span></summary>
+        <ul id="rptRisks"></ul>
+      </details>
+
+      <div class="rpt-layout">
+        <aside class="rpt-toc">
+          <div class="rpt-toc-h">目录</div>
+          <div id="rptToc"></div>
+        </aside>
+        <article class="rpt-doc" id="rptDoc"></article>
+      </div>
+
+      <!-- ① 最新机构研报(默认收起; ⛔ 必须留在正文之后, 见本块顶部注释) -->
+      <div id="rptExt"></div>
+    </section>
+  </main>
+</div>
+<script defer src="/static/votes_kline.js?v=20260930C"></script>
+<script defer src="/static/detail/app.js?v=20260930C"></script>
+</body>
+</html>

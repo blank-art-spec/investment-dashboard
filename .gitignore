@@ -1,0 +1,56 @@
+# 项目本地环境和迁移备份，保留在电脑中，不纳入未来仓库。
+/.venv/
+/.runtime/
+/requirements.local.lock.txt
+
+# 真实账户、缓存、密钥、研报与 AI 运行结果；示例配置位于 examples/。
+data/
+/研报/
+/gold_stock_ai.json
+**/secrets.json
+**/settings.json
+.env
+.env.*
+!.env.example
+
+# 抓取专用浏览器登录态，不共享个人会话。
+xueqiu_profile/
+xueqiu_stock_profile/
+yuanbao_profile/
+_edgeprof_c2/
+
+# 日志、下载输出、开发过程产物和临时测试数据。
+*.log
+/log_launch.txt
+output/
+_out/
+_dev/
+/tests/_tmp*/
+/tests/_*.json
+*.bak
+*.bak_*
+
+# Python 缓存、打包产物与检查工具缓存。
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# 一次性脚本只匹配根目录，不能屏蔽 dash_core/__init__.py 及正式 worker。
+/_*.py
+/_*.js
+/_*.png
+/tests/_*.py
+
+# 编辑器和系统文件。
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini

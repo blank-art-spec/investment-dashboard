@@ -1,0 +1,22 @@
+# 中文源码与文档使用 UTF-8；集中规范换行，便于未来在 GitHub 查看差异。
+* text=auto eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.ps1 text eol=crlf
+
+# 批处理和旧 VBS 使用 GBK；保留原始字节和 CRLF，避免 Git 重新编码。
+*.bat -text whitespace=cr-at-eol
+*.vbs -text whitespace=cr-at-eol
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.pdf binary
+*.exe binary
+*.dll binary

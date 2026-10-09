@@ -1,0 +1,2762 @@
+/* 在 Tabler 之上的金融主题覆盖 + 自定义组件
+   ==========================================================================
+   设计口径(2026-09-28 定稿): 「读数终端 / Quote Sheet」
+   主体: 一个人(A股+港股+美股)的持仓与风险驾驶舱, 每天看几遍, 只回答一个问题 ——
+        现在该不该动、动哪只。页面真正的主角是**那一格格数字**, 不是卡片本身。
+   三条纪律:
+     ① 颜色只用来编码数据(涨跌/状态)。界面自己的声音靠字重·细线·反白表达, 不靠品牌色 ——
+        所以底色改成**中性石墨**(去掉蓝调 navy), 机构色换成**钢蓝**。
+        为什么必须换: indigo(#6366f1)是"没做决定"的默认色, 而且它和"紫 = 系统回执"
+        (见下方语义色轴第②条)本来就撞色 —— 用户的"成功提示是紫的"和"按钮是紫的"混在一起。
+     ② 数字是主角: 全站数字统一用 DIN(工程制图字体, 天生 tabular 且略窄, 塞得进密表),
+        单位/括号统一降一档(见 .pnl-brk)。
+     ③ 少即是准: 只在**一处**冒险 —— 卡片标题与品牌用思源宋体 Heavy(中文研报的语言),
+        其余全部安静。不喜欢这一处就删 .card-title / .brand-text 里的 --font-display 那一行。
+   前景色全部按 WCAG 算过, 最差组合(小字压在最亮的面 surface-2 上) >= 4.87:1。 */
+:root{
+  /* 轴① 数据色(红=好/涨, 绿=坏/跌, A 股口径) —— 只换了色值, 语义一个字没动 */
+  /* Coinbase「Trading Semantics」: 涨跌色**只作字色**, 不做按钮/卡片底 —— 见 Do/Don't 最后一条。
+     色值取 Coinbase 的 semantic-up/down 再往深底提一档亮度(原值压在 #0a0b0d 上只有 3.0~3.3:1)。 */
+  --up:#ff5c62; --down:#2fb97e; --warn:#f4b000;
+  /* 轴② 界面机构色: Coinbase Blue。
+     ⚠️ 不是原值 #0052ff —— 它在墨底上实测只有 3.09:1(卡片面) / 2.81:1(内凹面), 当字用不合格。
+     这里保留它的色相与"全站唯一动作色"的角色, 只把亮度提到 #5b8cff(5.62:1 / 5.11:1)。
+     想要原版蓝就把这一行换回 #0052ff, 但要接受小字不达标。 */
+  --accent:#5b8cff; --accent-rgb:91,140,255; --accent-hover:#7ba3ff;
+  /* 压在机构色实底上的字色: 亮蓝底 + 墨字 6.23:1, 亮蓝底 + 白字 只有 3.16:1 —— 深底上必须用墨字。 */
+  --accent-ink:#0a0b0d;
+  /* 压在'机构色淡底'(chip / badge / q-step 那种 rgba(accent,.15) 底)上的字色。
+     淡底实测混出 #20293e~#263147, 用 #b9c8ff 落上去 8.82:1 / 7.92:1。 */
+  --accent-on-tint:#b9c8ff;
+  /* 压在"涨/跌/琥珀"实底徽章上的字色: 白字在 #2fb97e 上只有 2.51:1, 墨字 7.84:1 —— 一律墨字 */
+  --on-up:#0a0b0d; --on-down:#0a0b0d; --on-warn:#0a0b0d;
+  /* 面: 底 / 面 / 内凹面 —— Coinbase 的 surface-dark / surface-dark-elevated, 中性石墨无蓝调 */
+  --os-bg:#0a0b0d; --os-surface:#16181c; --os-surface-2:#1d2127;
+  --os-border:rgba(255,255,255,.10); --os-line:rgba(255,255,255,.06);
+  --os-text:#f7f8f8; --os-muted:#a8acb3;
+  /* 淡底上的字色(夜间): 实测夜间全站 0 处对比度失败, 所以这里直接用本体色即可。
+     留这三条是为让 .adv-tag 等淡底标签**两个主题写一份**规则, 不必到处加 html.theme-light 前缀。
+     日间那份在 html.theme-light 里被压深覆盖。 */
+  --on-tint-up:var(--up); --on-tint-down:var(--down); --on-tint-warn:var(--warn);
+  /* 字体三档角色(全部本机自带, 零下载: DIN Next LT Pro / Bahnschrift / 思源宋体 / Noto Sans SC) */
+  --font-num:"DIN Next LT Pro",Bahnschrift,Consolas,"Noto Sans SC","Microsoft YaHei UI",monospace;
+  --font-display:"Source Han Serif SC Heavy","Source Han Serif SC","Songti SC",SimSun,serif;
+  /* 把 Tabler 自己的两个默认也一起换掉: ① 它的 sans 栈第一位是 "Inter Var"/Inter(本机没有,
+     实际落到 Segoe UI); ② 它的边框色是蓝灰 #25384f, 与中性石墨底不搭。 */
+  --tblr-font-sans-serif:"Noto Sans SC","PingFang SC","Microsoft YaHei UI","Microsoft YaHei",Segoe UI,-apple-system,sans-serif;
+  --tblr-border-color:rgba(255,255,255,.10);
+  --tblr-border-color-translucent:rgba(255,255,255,.06);
+  /* ---- K线·大V圆点(共用组件)令牌: 结构与交互在 static/votes_kline.{js,css}, 本页只给颜色与皮肤 ----
+     2026-09-29「共享一份」时加的: 判断校验与个股详情原本各写一套 .jline-pop/.jlp-*, 现在只留
+     votes_kline.css 那一份, 各页靠下面这几支令牌把自己的主题色/外观喂进去。改外观改这里, 别在
+     页面样式里再写第二份。 */
+  --vk-up:var(--up); --vk-down:var(--down);
+  --vk-tx:var(--os-text); --vk-tx2:var(--os-muted); --vk-tx3:var(--os-muted);
+  --vk-soft:var(--os-surface-2);
+  --vk-pop-bg:var(--os-surface); --vk-pop-line:var(--accent);
+  --vk-pop-shadow:0 12px 32px rgba(0,0,0,.4);
+  --vk-pop-z:40; --vk-pop-max-h:420px; --vk-pop-font:12px; --vk-pop-lh:1.55;
+  --vk-rowline:var(--os-border); --vk-note:var(--warn);
+  /* 右上角逐条: 主面板这档带底框(压在网格上更清楚), 详情页那档不要框 */
+  --vk-ohlc-top:6px; --vk-ohlc-right:8px; --vk-ohlc-z:30; --vk-ohlc-minw:150px;
+  --vk-ohlc-bg:var(--os-surface-2); --vk-ohlc-bd:1px solid var(--os-border);
+  --vk-ohlc-pad:4px 9px; --vk-ohlc-chsize:14px;
+}
+/* 日间模式令牌 (html.theme-light 时生效, 单套规则读取变量即可双主题)
+   日间不是"把夜间反过来": 底用冷灰(不是纯白 —— 纯白会把整页压飘), 面用纯白压在底上;
+   机构色压深到能在白底上写小字(6.14:1); muted 用 #4b5058(11px 小字 6.80:1)。 */
+html.theme-light{
+  /* 悬停"浮起"那一层投影: Coinbase 只有**一档**阴影(0 4px 12px rgba(0,0,0,.04))。
+     白底上 .04 太弱读不出, 这里取 .10 —— 仍然是全站唯一一档, 没有第二层。 */
+  --shadow-pop:0 4px 12px rgba(15,23,42,.10);
+  /* 日间是 Coinbase 的主场(它的基准画布就是纯白): 这里直接用原版值。
+     primary #0052ff 压白底 5.75:1; 涨跌色用原版 semantic-down/up 压深到白底可读。 */
+  --up:#cf202f; --down:#057a4f; --warn:#8a5a00;
+  --accent:#0052ff; --accent-rgb:0,82,255; --accent-hover:#003ecc;
+  --accent-ink:#ffffff;
+  /* 淡底实测混出 #e0eaff, 用原版压深蓝 #003ecc 落上去 6.79:1 */
+  --accent-on-tint:#003ecc;
+  /* 白底上的实底徽章: 白字在 #cf202f 上 5.38:1 达标 */
+  --on-up:#ffffff; --on-down:#ffffff; --on-warn:#ffffff;
+  --os-bg:#f7f7f7; --os-surface:#ffffff; --os-surface-2:#eef0f3;
+  --os-border:#dee1e6; --os-line:#eef0f3;
+  --os-text:#0a0b0d; --os-muted:#5b616e;
+  --tblr-border-color:#dee1e6;
+  --tblr-border-color-translucent:#eef0f3;
+  /* 淡底上的字色: 全站有一批"同色淡底 + 同色字"的小标签(.adv-tag / .rs-tag / .mm-mark /
+     .chip-bull 等), 白底上 14% 淡底混出 #f8e0e2 这种极浅色, 原来的 --up #cf202f 压上去
+     只有 4.29:1 —— 差 0.21 就合格, 但整页有 19 处。加一组**压深一档**的同色系字色,
+     只给这批淡底标签用(6.34 ~ 8.48:1), 实底徽章与纯白面上的字仍用 --up/--down 本体。 */
+  --on-tint-up:#a1151d; --on-tint-down:#045c3c; --on-tint-warn:#6b4500;
+}
+/* ==========================================================================
+   统一口径层(2026-09-29 美化): 半径 / 投影 / 焦点 / 间距
+   --------------------------------------------------------------------------
+   写这一层的起因: 全站半径实测落在 10px 与 8px 两档上(87 : 83), 卡片走 10px、
+   按钮和 chip 走 8px —— 两套值差 2px, 肉眼几乎看不出区别, 却让整页拼不平。
+   同时 Tabler 自己那枚 rgba(24,36,51,.06) 的按钮投影还漏在 .btn 上(它按白底定的,
+   压在墨底上等于一层灰膜), 卡片投影已在上一轮拆掉, 按钮没跟着拆。
+   ⇒ 这里把"形状"收成三个令牌, 之后所有组件只准引用令牌, 不再各写各的像素。
+   只做**收敛**, 不做改版: 8px 一律抬到 10px(贴近卡片的那一档), 没有别的动作。 */
+:root{
+  /* ---- 半径: 换成 Coinbase 的尺度 ----
+     它的规矩很直白: **可点的 → 胶囊; 容器 → 24px; 图标 → 正圆; 不要直角**。
+     原来全站是 10/10/999/4 四档 —— 按钮和卡片同一个圆, 一排按钮挤在一起时看不出谁是谁。
+     现在容器抬到 12px(全站卡片实测 ~200 处, 一次抬 2px 是能感觉到"松了一口气"的最小剂量,
+     直接上 24px 会让密表里的卡片彼此顶开), 可点元素走胶囊。 */
+  --r-card:12px;   /* 卡片 / 弹层 / 大块容器 —— 最外层 */
+  --r-ctl:8px;     /* 输入 / chip / 小标签 —— 非主 CTA 的控件 */
+  --r-pill:100px;  /* Coinbase rounded.pill: **所有 CTA 按钮 / 徽章 / 搜索条** */
+  --r-tag:4px;     /* 行内小标签 / 细进度条 / 图例 —— rounded.xs */
+  --r-full:9999px; /* 正圆: 资产图标圆底 / 头像 —— rounded.full */
+  /* ---- 控件高度: 全站只有**四档** ----
+     之前实测出 44/36/33/32/29/28/27/24/20/18 共 10 个高度 —— 圆角统一了也还是"看着不齐",
+     因为眼睛先读的是**尺寸节奏**。现在收敛成 4 档, 每档之间固定 4px 步进:
+       L 40  主 CTA(表单提交 / 弹层确认) —— 一屏只允许出现一两个
+       M 32  次级按钮 + 独立动作(刷新/抓取/导出) —— 干活的主力
+       S 28  分段控件(tab / chip / 周期切换) —— 成组出现, 必须比 M 小一号
+       XS 24 密表行内微按钮(表头 AI 复核 等) —— 只在表格里用
+     图标按钮单独一档 36x36(① 只有图标→正圆, 见下), 关闭类 28x28。 */
+  --ctl-l:40px;
+  --ctl-m:32px;
+  --ctl-s:28px;
+  --ctl-xs:24px;
+  --ctl-icon:36px;
+  --ctl-close:28px;
+  /* ---- 投影: 全站只有**一档** ----
+     Coinbase 的 Do/Don't 明写 "Don't add drop shadow tiers —— system has one shadow tier"。
+     原来这里有 float(.55) / pop(.32) 两层, 加 Tabler 漏下来的那一枚其实是三层。
+     现在: 卡片一律**不投影**(深底上软阴影看不见, 只会让每张卡糊着同一层灰),
+     层级交给细边 + 面的明度差; 只有真正"浮在页面之上"的弹层用下面这两枚。 */
+  --shadow-float:0 18px 48px rgba(0,0,0,.55);
+  --shadow-pop:0 6px 18px rgba(0,0,0,.32);
+  /* 键盘焦点: 全站只有这一枚。原来的 :focus-visible 由各处自己写(有的根本没写),
+     深色底上 Tabler 默认那圈蓝色不明显。用 accent 描一圈 + 1px 偏移, 压在任何面上都看得见。 */
+  --ring:0 0 0 2px var(--os-bg), 0 0 0 3px var(--accent);
+  /* ---- 字号音阶 ----
+     实测全站原有 22 档(含 9.5 / 10.5 / 11.5 / 12.5 / 13.5 这种半像素), 相邻两档差 1px、
+     肉眼分不出来, 却让每处都在"自己定一个值"。收成下面这几档, 小字区(10~13)是全站
+     用量最大的一段, 一次只差 1px 也够拉开层级; 大字区留给各处真正的主角数字。
+     半像素已从全站抹平: 它们是 em/rem 换算的残留, 换界面缩放就又漂。 */
+  --fs-10:10px;  /* 角标 / 徽章 / 图例 —— 最小, 只给"看一眼就过"的 */
+  --fs-11:11px;  /* 表头 / 次要标签 / 轴标签 —— 全站用量最大 */
+  --fs-12:12px;  /* 正文小字 / 按钮 / chip —— 默认次要字 */
+  --fs-13:13px;  /* 正文 / 表体 —— 默认字 */
+  --fs-14:14px;  /* 正文强调 / 卡片小标题 */
+  --fs-15:15px;  /* 卡片标题(.card-title) / 弹层头 */
+}
+/* 焦点环(全局兜底): 一个口径, 不写第二份。 */
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,
+textarea:focus-visible,[tabindex]:focus-visible{outline:none;box-shadow:var(--ring)}
+/* 按钮: 拆掉 Tabler 那枚白底投影(它按白底定的, 压在墨底上等于一层灰膜)。
+   Coinbase 规矩: **所有 CTA 走胶囊**(rounded.pill 100px), 高度 44px(触达 WCAG AAA)。
+   ⚠️ 但本页的 .btn 绝大多数是**表格里的行内小按钮**(加自选/删除/刷新), 强行 44px
+   会把密表撑散 —— 所以胶囊形状全给, 44px 只给主 CTA(.btn-primary), 其余保持原有高度。 */
+.btn{border-radius:var(--r-pill)}
+.btn:not(:disabled){box-shadow:none}
+html.theme-light .btn:not(:disabled){box-shadow:none}
+/* 主 CTA: --ctl-l(40px) 触达高度 + 胶囊 + 唯一的动作色
+   (原 44px → 40px: 44 与次级档 20/18 相差 2.4 倍, 断层太大; 40 与 32 只差 8px, 节奏是连续的) */
+.btn-primary{border-radius:var(--r-pill);min-height:var(--ctl-l);padding-left:20px;padding-right:20px;
+  font-weight:600;background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);color:var(--accent-ink)}
+/* 输入框: Coinbase 的 rounded.md(12px) + 聚焦时边线加粗到 2px 并换成动作色。
+   原来是各处自己写半径, 焦点样式也各写各的 —— 这里收成一个口径。 */
+input.form-control,select.form-control,textarea.form-control{
+  border-radius:var(--r-ctl);border:1px solid var(--os-border);background:var(--os-surface);color:var(--os-text)}
+input.form-control:focus,select.form-control:focus,textarea.form-control:focus{
+  border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);outline:none}
+/* 尊重「减少动态效果」: 关掉装饰性过渡, 保留必要的功能性过渡(加载/进度类另算) */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important;scroll-behavior:auto!important}
+}
+
+/* ===== 全站颜色语义(唯一口径) =====
+   轴① 判断/市场(绝大多数地方): **红=好, 绿=坏** —— A 股口径, 与模块1「加仓红 / 减仓绿」同源。
+      红 好 = 加仓/建仓/顺风/正常/在区间内   绿 坏 = 减仓/逆风/失败条件触发/看空
+      黄 = 留意·中性   灰 = 缺数据
+      ⛔ 2026-09-27 第十七改补齐: 之前还剩 fr-state / fr-chip / risk-verdict / hp-lb·hp-ub /
+         navc-tag / mg-n.bad / 抓取受限横幅 几处在用**旧语义(绿=好)**, 用户看到「顺风还是绿色」
+         又来问 —— 已全部按 轴① 翻正。同一个绿在模块1 是"减仓"、在框架页是"顺风"就是矛盾。
+      行情涨跌幅是轴① 的特例: 涨=红 / 跌=绿(.up/.down/.mg-pct/.num-*), 涨即是好, 不冲突。
+   轴② 系统回执(只有这三族, 与行情方向无关, 刻意**不套**轴①):
+      · 收盘准备步骤 .cp-ok(绿 ✓)/ .cp-fail(红 ✗)
+      · 提示条 .toast(err 红 / warn 黄 / ok 紫)
+      · 破坏性动作(删除/关闭)一律红: .hold-del / .v-chip button / .q-custom-x / .q-scheme-del
+      理由: "✓ 成功"与"✗ 失败"是通用符号, 把它们翻成红✓/绿✗ 只会让人更慌。 */
+body{font-family:var(--tblr-font-sans-serif,"Noto Sans SC","PingFang SC","Microsoft YaHei UI",-apple-system,sans-serif);background:var(--os-bg);color:var(--os-text);font-size:14px;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+/* 数字用 DIN: 工程/技术制图的字体, 天生 tabular 且比正文窄 —— 行情表里一排数字才对得齐、放得下。
+   :not(th) 是故意的 —— 表头用的是 "IC均值" 这种中文+拉丁混合标签, 不该被数字字体接管。 */
+.num:not(th){font-family:var(--font-num)}
+/* OpenStock 风格: 近黑navy底 + 卡片浮层 + 细边 + 蓝紫强调色 */
+.page-body{background:var(--os-bg)}
+/* 2026-09-28: 去掉顶部那层径向"氛围光"(纯装饰, 而且是"渐变洗底"的套路)。
+   页面回到一整块墨色, 层级交给细边与面的明度差。 */
+.page-wrapper{padding-top:0;background:var(--os-bg)}
+/* 宽屏: 容器铺满全宽, 消除两侧深色留白(黑边) */
+@media (min-width: 1440px){
+  .container-xl{max-width:none;padding-left:24px;padding-right:24px}
+}
+.card{background:var(--os-surface);border:1px solid var(--os-border);border-radius:var(--r-card);box-shadow:0 1px 0 rgba(255,255,255,.025) inset}
+/* 2026-09-28: 去掉那三层投影。深底上的投影本来就几乎看不见, 它唯一的作用是让每张卡都糊着
+   同一层灰 —— "每张卡都压同一个 rgba(0,0,0,.1) 软阴影" 正是模板感最重的一条。
+   层级改由**细边 + 面的明度差**表达(印在墨上的纸), 也用不着为日间模式再写一套阴影。 */
+html.theme-light .card{box-shadow:0 1px 0 rgba(255,255,255,.7) inset}
+.card-header,.card-header:first-child{border-bottom:1px solid var(--os-border);background:transparent;
+  border-radius:var(--r-card) var(--r-card) 0 0}
+/* 卡片标题 = 中文研报的声音(思源宋体 Heavy)。**全站只有这一处 + 品牌用衬线**,
+   是这次唯一敢冒险的地方: 中文 UI 一片黑体, 一条宋体标题立刻有了来处(券商研报)。
+   不喜欢就删掉下面两处 font-family 声明(其余改动不受影响)。 */
+.card-title{font-family:var(--font-display);font-weight:700;font-size:15px;letter-spacing:0}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn-primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn-outline-primary{color:var(--os-text);border-color:var(--os-border)}
+.btn-outline-primary:hover{background:rgba(var(--accent-rgb),.14);border-color:var(--accent);color:var(--os-text)}
+.text-secondary,.muted{color:var(--os-muted)!important}
+/* 提高夜间模式卡片主要数值可读性: 显式覆盖 Tabler 默认 heading/body 色 */
+.card .h1,.card .h2,.card .h3,.card-title{color:var(--os-text)}
+.card .subheader{color:var(--os-muted)}
+/* ---------- 账户快照 · 行情带(2026-09-28 改版) ----------
+   原来是 4 张一模一样的圆角卡 —— 内容被切成几块相同的卡、每块压同一层灰影, 是最没主见的长相。
+   这 4 个数本来讲的是同一件事(账户此刻的快照), 所以收成**一条带子**: 一张面、四格, 格间只用
+   一条竖细线。一次扫读就够, 也不再假装是四块互不相干的内容。
+   2026-10-01: 用户要求把「赌博指数」并进来 → **五格**(那一格是**状态**不是钱, 见 .kpi-gamble)。
+   ⚠️ 里面的 .subheader / .h1 / .pnl-cell / .num 类名**不能改**: app.js:573/585 会用
+      className="h1 num pnl-cell …" 把 #sumPnl / #dayPnlCell 的类整串重写。 */
+.kpi-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
+  background:var(--os-surface);border:1px solid var(--os-border);border-radius:var(--r-card);overflow:hidden}
+.kpi{padding:13px 18px 14px;min-width:0}
+.kpi + .kpi{border-left:1px solid var(--os-border)}
+.kpi .subheader{font-size:11px;font-weight:600;color:var(--os-muted);letter-spacing:.2px;
+  margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .h1{color:var(--os-text);font-size:30px;font-weight:700;line-height:1.14;
+  letter-spacing:-.015em;margin:0}
+.kpi:first-child .h1{color:var(--accent)}   /* 总资产: 唯一被强调的数(其余三个同字号同色) */
+/* 「连续盈利 N 天」(2026-09-30 用户口径): **横向**摆在「当日盈亏」那一格里, 绝不另起一行。
+   用户原话: 「在格子右边不行吗？你显示在下面又占地方」→ 所以它有两个落点(由 app.js 的
+   fitDayStreak 现测现选): ① 数字右边(.kpi-row 的第二个孩子, 与数字按基线对齐);
+   ② 宽度不够就退回标签行右边(.kpi-head 里 margin-left:auto) —— "当日盈亏 (¥)" 只有六个字,
+   那点余量一定放得下, 而且这两种落法都不新增行(高度 0)。
+   ⚠️ 为什么要多包一层 .kpi-head / .kpi-row: #dayPnlCell 的 class 每帧被 app.js 整串重写
+      ("h1 num pnl-cell …"), 不能给它自己加 display; 包新父节点则完全不影响那次重写。
+   数字(flex:0 0 auto)绝不缩; 小字可缩、缩不下就交给 JS 换短句, 宁可少几个字也不许把数字挤变形。
+   盈利 = 红(A 股口径, 与 --up 一致); 断了退回中性灰, 不吵。 */
+.kpi .kpi-head{display:flex;align-items:baseline;gap:8px;min-width:0}
+.kpi .kpi-head .kpi-sub{margin-left:auto}
+.kpi .kpi-row{display:flex;align-items:baseline;gap:8px;min-width:0}
+.kpi .kpi-row > .pnl-cell{flex:0 0 auto}
+.kpi .kpi-sub{flex:0 1 auto;min-width:0;font-size:11px;font-weight:600;color:var(--os-muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .kpi-sub.hot{color:var(--up)}
+/* ⑤ 赌博指数(2026-10-01 用户口径): 与上面四个数同一排的第 5 格 —— 但那 4 个是**钱**, 这一个是**状态**,
+   所以它的数字按档位上色(而不是按涨跌)。整格可点: 打开体检全文(见 app.js openGamble)。
+   ⚠️ 上色遵守全站语义: 红(--up)=好 / 绿(--down)=坏(与宏观错配那套灯一致, 红=顺风)。
+      档位名(#gambleBand 的小字)永远跟着色出现, 不让颜色单独承担意思。 */
+.kpi-gamble{cursor:pointer;border-radius:0;transition:background .14s ease}
+.kpi-gamble:hover{background:var(--os-surface-2)}
+.kpi-gamble:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.kpi-gamble .kpi-row > .h1{flex:0 0 auto}
+.kpi .h1.gmb-up{color:var(--up)}
+.kpi .h1.gmb-warn{color:var(--warn)}
+.kpi .h1.gmb-down{color:var(--down)}
+.kpi .kpi-sub.gmb-up{color:var(--up)}
+.kpi .kpi-sub.gmb-warn{color:var(--warn)}
+.kpi .kpi-sub.gmb-down{color:var(--down)}
+
+@media (max-width:991px){
+  .kpi-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kpi:nth-child(odd){border-left:0}
+  .kpi:nth-child(n+3){border-top:1px solid var(--os-border)}
+}
+@media (max-width:575px){
+  .kpi-strip{grid-template-columns:minmax(0,1fr)}
+  .kpi + .kpi{border-left:0;border-top:1px solid var(--os-border)}
+}
+/* 现金细目: 次要小胶囊条(不占独立主卡,避免喧宾夺主) */
+.cash-mini{font-size:11px;font-weight:500;color:var(--os-muted);background:var(--os-surface-2);border:1px solid var(--os-border);border-radius:var(--r-pill);padding:3px 12px;display:inline-block;line-height:1.6}
+.table{color:var(--os-text)}
+/* 表头统一口径: 小号+字距+降亮度, 与 muted 体系统一(所有表生效; !important 对抗 Tabler 内部表头字号) */
+.table th{font-size:11px!important;font-weight:600;color:var(--os-muted)!important;letter-spacing:.4px}
+.form-control{background:var(--os-surface-2);border-color:var(--os-border);color:var(--os-text)}
+.form-control:focus{background:var(--os-surface-2);border-color:var(--accent);color:var(--os-text);box-shadow:0 0 0 .2rem rgba(var(--accent-rgb),.25)}
+.form-label{color:var(--os-muted)}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+.up{color:var(--up)!important}
+.down{color:var(--down)!important}
+/* 顶部盈亏卡片: 金额后跟括号比例, 同行排版防溢出 */
+/* 盈亏是"金额 + 括号里的百分比" —— 主数走全文, 括号里的比例**统一降一档**(0.6em)并压暗。
+   2026-09-28: 选择器去掉 .card 前缀 —— 快照带(.kpi)不是卡, 这两处要共用同一套规则。 */
+.pnl-cell{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;line-height:1.15}
+.pnl-cell .pnl-main{font-weight:800}
+.pnl-cell .pnl-brk{font-size:.6em;font-weight:600;opacity:.9;white-space:nowrap}
+h1,h2,h3,h4{font-weight:600}
+
+/* 顶部导航栏: sticky 毛玻璃, 滚动内容透出磨砂 */
+.topbar{background:color-mix(in srgb,var(--os-surface) 86%,transparent);border-bottom:1px solid var(--os-border);position:sticky;top:0;z-index:1020;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0}
+.topbar-left{display:flex;align-items:center;gap:20px;min-width:0}
+.topbar-right{display:flex;align-items:center;gap:18px;flex-wrap:wrap;justify-content:flex-end}
+.brand{display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--os-text);font-weight:800;flex:none}
+/* 品牌标 = 松鼠徽章(位图)。原来那圈 accent 光晕是给线性 SVG 用的, 套在实心圆片上会变成一团脏光。
+   ⚠️ 必须留一圈中性描边: 徽章盘面是奶油色, 浅色主题下顶栏也是浅色, 只靠投影的话边直接化掉(实测过)。
+   描边用中性灰而不是 var(--os-border) —— 那变量在两套主题里一个偏黑一个偏白, 只会救一边。 */
+.brand-mark{display:inline-flex;line-height:0}
+.brand-mark img{width:24px;height:24px;display:block;border-radius:50%;
+  box-shadow:0 0 0 1px rgba(125,125,125,.45),0 1px 2px rgba(0,0,0,.28)}
+.brand-text{font-family:var(--font-display);font-size:17px;font-weight:700;letter-spacing:.02em}
+/* 账户切换: 品牌整体可点(⇄ 提示), 悬停才显形, 避免顶栏变花 */
+.brand{cursor:pointer}
+.brand-swap{font-size:12px;color:var(--os-muted);opacity:0;transition:.15s;margin-left:-2px}
+.brand:hover .brand-swap{opacity:1;color:var(--accent)}
+.brand:hover .brand-text{color:var(--accent)}
+.top-tabs{display:inline-flex;align-items:center;background:var(--os-surface-2);border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:4px;gap:2px}
+.top-tabs .tab{display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--r-pill);color:var(--os-muted);font-size:13px;font-weight:600;text-decoration:none;transition:.15s;white-space:nowrap}
+.top-tabs .tab i{font-size:15px}
+.top-tabs .tab:hover{color:var(--os-text);background:rgba(255,255,255,.04)}
+.top-tabs .tab.active{color:var(--accent-ink);background:var(--accent);border-color:var(--accent)}
+.fx-mini{display:flex;align-items:center;gap:14px;font-size:12px;color:var(--os-muted);white-space:nowrap}
+.fx-mini b{color:var(--os-text);font-weight:700;margin-left:3px}
+.fx-mini .upd b{color:#22d3ee}
+html.theme-light .fx-mini .upd b{color:#0e7490}
+
+/* ===== 近期事件轮播(2026-09-30 用户口径) =====
+   位置: 顶栏「五个模块的选择框」右侧、汇率之前的那一格(见 static/index.html 的 .ev-ticker)。
+   内容: 持仓股近期事件 + 宏观近期事件(议息/就业数据/重大会议…), 取最近三条, 每 8 秒换一条;
+        换条只改这一格的文本、不再发请求。判断与日期来自「设置」里的 AI(收盘准备那一步落盘)。
+   为什么宽度是 flex:1 1 0 而不是写死: 它是 .topbar-inner 的**中间那一格**, 只吃左右两组
+   之间的**余量**。写死宽度会在 1200~1300px 那一档把 .topbar-right 里的按钮顶到第二行
+   (那里是 flex-wrap:wrap); flex-basis:0 则余量不够时**先塌自己**, 左右两组大小位置一字不变。 */
+.ev-ticker{display:flex;align-items:center;gap:8px;flex:1 1 0;min-width:0;overflow:hidden;
+  margin:0 4px;font-size:12px;color:var(--os-muted);white-space:nowrap}
+.ev-ticker[hidden]{display:none}
+.ev-ticker .evt-ico{width:14px;height:14px;flex:none;color:var(--accent);opacity:.9}
+.ev-ticker .evt-body{display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden}
+.evt-when{flex:none;font-weight:700;color:#22d3ee}
+.evt-when.hi{color:#f87171}
+.evt-sep{flex:none;opacity:.5}
+.evt-who{flex:none;font-weight:600;color:var(--os-text)}
+.evt-t{overflow:hidden;text-overflow:ellipsis;opacity:.95}
+.evt-body.evt-in{animation:evtIn .45s ease both}
+@keyframes evtIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.evt-body.evt-in{animation:none}}
+html.theme-light .evt-when{color:#0e7490}
+/* 窄下来时它会被挤成 0 宽(实测: ≤1400px 时 .topbar-left 678 + .topbar-right 390 已经把那一行占满,
+   轮播的 flex-basis 是 0 → 只剩 0px) —— 于是让它在同一行放不下时**自己换到新的一行**、占满宽度。
+   为什么不是"收窄左右两组": .top-tabs 的子项是 nowrap, 一挤就会溢出成乱码; 而顶栏本来在 ≤1400px
+   就已经是两行(.topbar-right 内部换行, 实测无轮播时高度同样是 98px), 所以这里只是**用掉那一行**。
+   order: 让它在 DOM 上仍排在 .topbar-left 之后(=用户要的"选择框右侧"), 但换行后落到最后一排。 */
+@media (max-width:1460px){
+  .topbar-inner{flex-wrap:wrap}
+  .topbar-right{order:2}
+  .ev-ticker{order:3;flex:1 1 100%;margin:2px 0 0;font-size:11.5px}
+}
+/* ≤768px 时顶栏整体变竖排(见上面的媒体查询) → 这一格自己占满一行, 仍然只占一行、超出省略 */
+@media (max-width:768px){
+  .ev-ticker{flex:1 1 auto;width:100%;font-size:11px;margin:2px 0 0}
+  .evt-t{flex:1 1 auto}
+}
+.top-actions{display:flex;align-items:center;gap:8px}
+/* 图标按钮: Coinbase 的 asset-icon-circular —— **正圆**(rounded.full), 不是圆角方块。
+   正方形容器 + 9999px 半径 = 正圆, 与"可点元素走胶囊"是同一条规矩的两面:
+   胶囊给有文字的按钮, 正圆给只有一个图标的按钮。 */
+.btn-icon{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:var(--r-full);border:1px solid var(--os-border);background:var(--os-surface-2);color:var(--os-text);cursor:pointer;transition:.15s}
+.btn-icon:hover{background:rgba(var(--accent-rgb),.14);border-color:var(--accent);color:var(--accent)}
+.btn-icon.active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn-icon i{font-size:16px}
+/* ── 按钮形状统一(2026-09-30, 用户"有些按钮加了蓝底圆圈, 有些没有, 不统一") ──
+   一条规矩, 三类形状:
+     ① 只有图标 + 正方形容器 → 正圆(rounded.full): .btn-icon / .ai-sum-btn / .ai-risk-btn / .btn-close
+     ② 有文字的按钮         → 胶囊(rounded.pill): .btn / .btn-add-watch / .hv-toggle / .fr-btn
+     ③ 成组的分段控件       → 胶囊, 但比 ② 小一号(它们是一排, 不是独立动作)
+   之前只把 .btn-icon 改成了正圆, 其余(.ai-sum-btn 已经是圆但尺寸不同、.btn-close 是 4px 方块、
+   .btn-tab/.hv-toggle/.btn-add-watch 是 8px 圆角方)各是各的 —— 看着像"改了一半"。 */
+.btn-close{border-radius:var(--r-full)!important;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;padding:0}
+@media (max-width: 768px){
+  /* 顶栏: 极窄屏分两行 —— 上:品牌+4操作图标, 下:可横滑的6 tab(只显图标) + 隐藏品牌副字 */
+  .topbar{padding:6px 0}
+  .topbar-inner{flex-direction:column;align-items:stretch;gap:6px;padding:0}
+  .container-xl{padding-left:10px;padding-right:10px}
+  .topbar-left{justify-content:space-between;align-items:center;gap:8px}
+  .topbar-right{justify-content:flex-end;gap:6px}
+  .brand-text{display:none}
+  .brand-mark img{width:22px;height:22px}
+  /* 横滑tab条: 隐藏副字(图标+高亮激活色足够辨识) */
+  .top-tabs{
+    width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;
+    padding:3px;gap:2px;border-radius:var(--r-ctl);scrollbar-width:none;justify-content:flex-start
+  }
+  .top-tabs::-webkit-scrollbar{display:none}
+  .top-tabs .tab{padding:7px 11px;flex:none;font-size:12px}
+  .top-tabs .tab .icon{width:16px;height:16px}
+  .top-tabs .tab span{display:none}
+  /* 操作按钮变小, 紧贴右上 */
+  .btn-icon{width:32px;height:32px}   /* 形状不随窄屏变: 还是正圆, 只是小一档 */
+  .btn-icon .icon{width:16px;height:16px}
+  .top-actions{gap:4px}
+  /* 汇率与时戳: 更紧凑一行 */
+  .fx-mini{order:0;width:100%;justify-content:space-between;gap:6px;font-size:11px;margin-top:2px;flex-wrap:nowrap}
+  .fx-mini > span{white-space:nowrap}
+  /* 主面板在body上加底部留白给dock */
+  body{padding-bottom:62px}
+  /* 卡片: 收窄内边距 */
+  .card-body{padding:12px}
+  .card-header{padding:10px 12px}
+  /* 顶部4大数小卡: 更紧凑两行排(每个单卡独占一行变2x2) */
+  .row-deck.row-cards > [class*="col-"]{margin-bottom:8px}
+  .card .h1{font-size:24px}
+  /* 饼图缩小, 标题留白; 窄屏下对冲窄栏与饼图上下堆叠 */
+  /* 特异性提高一档: 主定义在文件后部, 否则移动端 height 会被 height:100% 覆盖 */
+  .risk-card-body > .donut-wrap{height:auto;min-height:0;flex-wrap:wrap;row-gap:10px;margin:0}
+  .risk-card-body > .donut-wrap > .donut-box{flex:1 1 100%;height:270px;aspect-ratio:auto;max-width:100%;margin:0 auto}
+  .donut-wrap > canvas{width:100%;height:100%}
+  /* ⚠️ 这一批移动端规则原来**全是死的**: 同名基础规则写在文件后部(~1060 行的对冲窄栏、~357 行的
+     #holdingsScroll), 媒体查询**不加特异性**, 后写的同特异性规则赢 ⇒ 手机上一整行仍按桌面的
+     288px 窄栏 + 470px 表高渲染。每条都往上加一层父选择器把它们抬赢。2026-09-29 */
+  .donut-wrap > .hedge-panel{flex:1 1 100%;overflow:visible;gap:12px}
+  .hedge-panel .risk-verdict{min-width:78px;padding:6px 10px}
+  .hedge-panel .risk-verdict .rv-big{font-size:18px}
+  .hedge-panel .risk-verdict .rv-cap{font-size:12px}
+  .hedge-panel .hp-row .hp-k{font-size:13px}
+  .hedge-panel .hp-row .hp-v{font-size:22px}
+  /* 持仓表: 紧凑字号, sticky表头 */
+  .table{font-size:12px}
+  .table th,.table td{padding:6px 4px}
+  .table-responsive#holdingsScroll{max-height:300px}
+  /* 热力图: 缩内边距 */
+  .heat-tile{padding:8px 10px;border-radius:var(--r-ctl)}
+  .heat-tile .ht-name{font-size:11px}
+  .heat-tile .ht-mkt{font-size:10px}
+  .heat-tile .ht-chg{font-size:13px}
+  /* ============ 各子页移动端适配 ============ */
+  /* 信息获取 (xueqiu) */
+  .post{padding:10px 11px}
+  .post-text{font-size:12px;line-height:1.6}
+  /* 判断校验 (judge) —— 已有 820 断点, 760 进一步收紧 */
+  .judge-split{grid-template-columns:1fr;gap:10px}
+  .judge-split .jtrend-cv{height:280px}
+  .jstock-scroll{max-height:240px}
+  .jpool-tabs .btn-tab{padding:6px 9px;font-size:12px}
+  .jv-chip{min-width:135px;max-width:160px;padding:7px 9px}
+  .dt-kline-tabs .btn-tab{padding:5px 10px;font-size:12px}
+  /* 寻找机会 (opp = LOF 溢价/折价 + 超跌池) 表 */
+  #arbScroll{max-height:380px}
+  #arbTable th,#arbTable td{font-size:11px;padding:5px 3px;white-space:nowrap}
+  #biasTable th,#biasTable td{font-size:11px;padding:5px 3px;white-space:nowrap}
+  /* 窄屏头部: 切换药丸独占一行, 避免标题+药丸+按钮+时戳挤成横向滚动 */
+  #tab-opp .card-header{flex-wrap:wrap;row-gap:4px}
+  #tab-opp .opp-tabs{margin-left:0;order:3;width:100%;margin-top:2px}
+  #tab-opp .opp-tabs .btn-tab{flex:1;text-align:center;padding:6px 9px;font-size:12px}
+  #arbScrapeTime,#biasStatus{font-size:11px}
+  /* 宏观 (macro) 卡片栅格: 单列 */
+  .mg-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .mg-tile{padding:8px 10px}
+/* 2026-09-20 瘦身: .mg-cap / .mg-val 0 命中(宏观卡的数值区实际用的是 .mg-px/.mg-unit/.mg-row2), 删除 */
+  /* 抽屉: 全屏(从右滑入改为全屏覆盖) */
+  .drawer{width:100vw;max-width:100vw;border-left:none;border-radius:0}
+  .drawer-body,.drawer-header,.drawer-footer{padding-left:14px;padding-right:14px}
+  /* 命令面板: 顶部偏上 */
+  .cmd-box{top:8%;width:94vw}
+  /* 表单按钮: 防止太挤 */
+  .form-control{font-size:13px;padding:7px 10px}
+  .btn{padding:6px 11px;font-size:13px}
+  /* 兜底: 大表格横向滚动 */
+  .table-responsive{-webkit-overflow-scrolling:touch}
+}
+/* 720-820 区间(tab文字还在但顶栏开始挤): 横滑条+紧凑 */
+@media (max-width:820px) and (min-width:769px){
+  .topbar-inner{gap:10px}
+  .top-tabs .tab span{display:none}
+  .top-tabs .tab{padding:7px 10px}
+  .fx-mini{font-size:11px;gap:10px}
+}
+
+/* 资产配置环图(左: 对冲窄栏 · 右: 饼图) */
+/* ⚠️ 2026-09-29 用户「中间这块很重要，但是比例偏小了，放大比例」(红框圈的就是这一整行:
+   对冲+环图卡 与 候选/持仓表卡)。这一行的高度由两个数各自顶起来 —— 表格 `#holdingsScroll`
+   的 max-height 和环图 `.donut-wrap` 的 min-height; 两卡 `h-100` 会互相拉平, 所以**必须一起抬**,
+   只抬一个的话另一边只是被 stretch 出空白。380/330 → 470/470: 环图直径=盒高, 跟着一起变大;
+   表格从 ~7 行到 ~10 行。窄屏那两条 media 覆盖(270/300)不动 —— 小屏要的是能一眼看完。 */
+.donut-wrap{position:relative;height:100%;min-height:470px;width:100%;display:flex;align-items:center;justify-content:center;gap:24px}
+/* 饼图盒改成正方形并贴卡片右缘: 圆半径=盒高/2, 弧线直接顶到盒子四边 → 与右侧卡缘/两个角落小标之间不再有死空白(小标落圆的四角凹处), 2026-09-16 */
+/* donut-box 可收缩(flex-shrink) + max-width 上限: 防"口径面板开→卡片拉高→画布放大成固定px→
+   关闭后缩不回"的死锁(2026-09-16 实测 bug), 画布同样加 max 上限让 Chart.js 能跟着容器缩小 */
+.donut-box{position:relative;flex:0 1 auto;aspect-ratio:1/1;height:100%;min-width:0;max-width:100%;margin-left:auto;display:flex;align-items:center;justify-content:center}
+.donut-box canvas{max-width:100%;max-height:100%}
+.risk-card-body{display:flex;flex-direction:column}
+
+/* 内联 SVG 图标统一尺寸 */
+.icon{width:18px;height:18px;display:inline-block;vertical-align:middle}
+.btn-icon .icon{width:18px;height:18px}
+.tab .icon{width:16px;height:16px}
+/* 表格涨跌着色 */
+#holdingsBody td .up,#holdingsBody td .down{font-weight:600}
+/* 持仓列表: 固定高度内滚动, 表头吸顶(高度与上面 .donut-wrap 的 min-height 成对, 一起决定这一行长多高) */
+#holdingsScroll{max-height:470px;overflow:auto}
+#holdingsTable thead th{position:sticky;top:0;background:var(--os-surface);z-index:1}
+html.theme-light #holdingsTable thead th{background:#fff}
+/* 列宽固定(2026-09-19): 持仓/观察共用这张表, 自动列宽会按内容重排 —— 观察视图里「⚠ 6天后除净」
+   这类小字把名称列撑宽 68px, 其余列跟着右移, 两个视图列位置对不上。min-width 兜住窄窗口:
+   窄到装不下时让外层横滑, 而不是把金额挤成两行。
+   ⚠️ 2026-10-02 用户「下面又出现滑轮了, 直接全部显示」⇒ min-width 680 → **545**(= 各列 need
+   之和)。680 是按旧字号/旧内边距估的、早就偏大: 用户视口 1229(容器 1108)下持仓卡体宽只有
+   544, 表格却要 701 ⇒ 永远挂着 136~182px 横滑条(实测 _out/_hold_sim2.py)。
+   同一天把字号 14→12 + 内边距 12/8→12/4 + 首列 12/8, 各列 need 之和 701→543; 再按 need
+   重排 colgroup(见 index.html) + 这一行两栏 6:6→47.5:52.5 —— 三件**缺一不可**。 */
+#holdingsTable{table-layout:fixed;min-width:530px}
+/* LOF套利表: 同款限高滚动+表头吸顶(表比持仓多, 用450px) */
+#arbScroll{max-height:450px;overflow:auto}
+#arbTable thead th{position:sticky;top:0;background:var(--os-surface);z-index:1}
+html.theme-light #arbTable thead th{background:#fff}
+/* LOF场外申购状态(轴①: 红=好/绿=坏) —— 与同表的「溢价红/折价绿」同向:
+   溢价 = 套利机会 = 好 = 红; 可申 = 这条路走得通 = 红; 暂停 = 套利堵死 = 绿。 */
+.c-pause{color:var(--down)!important;font-weight:700}
+.c-buy{color:var(--up)!important;font-weight:600}
+
+/* 信息获取 */
+/* 大V滑轮条(关注动态卡顶部, 2026-09-17): 单行横向滚动, 与命中榜同款交互 */
+.v-strip{display:flex;gap:8px;overflow-x:auto;padding:2px 1px 8px;margin-bottom:6px;scrollbar-width:thin}
+.v-strip .v-chip{flex:none}
+.v-chip{background:var(--os-surface-2);border:1px solid var(--os-border);border-radius:var(--r-pill);padding:5px 13px;display:flex;gap:8px;align-items:center;font-size:13px;color:var(--os-text);cursor:pointer;transition:border-color .15s,background .15s,box-shadow .15s}
+.v-av{width:18px;height:18px;border-radius:50%;flex:none;object-fit:cover;background:var(--os-surface-2)}
+.jv-chip .jv-av{width:24px;height:24px;border-radius:50%;flex:none;object-fit:cover;border:1px solid var(--os-border)}
+.v-chip:hover{border-color:var(--accent)}
+.v-chip.active{border-color:var(--accent);background:rgba(var(--accent-rgb),.16);box-shadow:0 0 0 1px var(--accent)}
+.v-chip.v-filter-all{border-style:dashed}
+.v-chip.v-filter-all.active{color:var(--accent)}
+.v-chip button{background:none;border:none;color:var(--up);cursor:pointer;font-size:14px;padding:0;width:20px;height:20px;border-radius:var(--r-full);display:inline-flex;align-items:center;justify-content:center;flex:none}   /* 轴②: 删除=红, 与持仓行 .hold-del 一致 */
+.posts{display:flex;flex-direction:column;gap:12px}
+.post{background:var(--os-surface-2);border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:12px 14px}
+.post-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--os-muted);margin-bottom:8px}
+.post-text{font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-word}
+.stock-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{background:rgba(var(--accent-rgb),.15);border:1px solid rgba(var(--accent-rgb),.5);color:var(--accent-on-tint);border-radius:var(--r-tag);padding:2px 9px;font-size:12px}
+html.theme-light .chip{background:rgba(var(--accent-rgb),.12);border-color:rgba(var(--accent-rgb),.45)}
+.chip.stock-chip{cursor:pointer;transition:border-color .15s,background .15s}
+.chip.stock-chip:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--os-text)}
+.chip .q-custom-x{background:none;border:none;color:var(--up);cursor:pointer;font-size:13px;line-height:1;padding:0 0 0 6px}   /* 轴②: 删除=红 */
+.chip .q-custom-x:hover{color:var(--os-text)}
+
+/* 抓取进度/现状面板(2026-09-29 用户口径: "想在系统界面上看抓取进度跟现状, 不然感觉好黑盒"):
+   「关注动态」标题下、大V滑轮之上的一块**只读**展示, 数据来自 GET /api/xueqiu/scrape-status。
+   ⚠️ 别把它挪进卡头: 卡头是 flex-wrap:nowrap, 长句会把整行顶出屏幕(实测 1280 下横向溢出 267px)。 */
+.xqprog{background:var(--os-surface-2);border:1px solid var(--os-border);border-radius:var(--r-ctl);
+  padding:10px 12px;margin-bottom:10px;display:flex;flex-direction:column;gap:8px;font-size:12px}
+html.theme-light .xqprog{background:rgba(15,23,42,.035)}
+.xqprog-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.xqprog-phase{font-weight:700;line-height:1.5;color:var(--os-muted)}
+.xqprog-phase.ph-scraping{color:var(--accent)}
+.xqprog-phase.ph-stalled,.xqprog-phase.ph-stopped,.xqprog-phase.ph-interrupted{color:var(--up)}   /* 轴②: 卡住/被拦 = 红(与 .toast.err、「自动抓取受限」同族) */
+.xqprog-bar{flex:1 1 140px;min-width:100px;height:6px;border-radius:var(--r-pill);
+  background:rgba(148,163,184,.18);overflow:hidden}
+.xqprog-bar i{display:block;height:100%;border-radius:var(--r-pill);
+  background:linear-gradient(90deg,var(--accent),#22d3ee);transition:width .4s ease}
+html.theme-light .xqprog-bar i{background:linear-gradient(90deg,var(--accent),#0e7490)}
+.xqprog-num{flex:none;color:var(--os-muted);font-variant-numeric:tabular-nums}
+.xqprog-num b{color:var(--os-text)}
+/* .xqprog-meta(那行"第几圈/节拍/回填额度/最近落盘/落盘时刻/本轮错误/历史回填"的关键数字横条)
+   与 .xqprog-hint(「最近动静」要重启才出现的那句说明)已随 app.js 一起删掉(2026-09-29 用户
+   「这些说明类的文字都删掉」)。`--up` 那条 .xq-stale 只有 meta 在用, 也一起没了。 */
+.xqprog-cap{display:block;color:var(--os-muted);font-size:11px;margin-bottom:4px}
+.xqprog-wall{display:flex;flex-direction:column}
+.xqprog-wall-in{display:flex;flex-wrap:wrap;gap:5px}
+.xqprog-v{border:1px solid var(--os-border);border-radius:var(--r-tag);padding:1px 7px;font-size:11px;
+  color:var(--os-muted);background:var(--os-surface);cursor:default;max-width:150px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.xqprog-v.on{border-color:rgba(var(--accent-rgb),.55);background:rgba(var(--accent-rgb),.14);color:var(--os-text)}
+.xqprog-v.bf{border-style:dashed}
+html.theme-light .xqprog-v{background:#fff}
+html.theme-light .xqprog-v.on{background:rgba(var(--accent-rgb),.12)}
+.xqprog-ev{border-top:1px dashed var(--os-border);padding-top:7px;display:flex;flex-direction:column;gap:3px;
+  max-height:126px;overflow-y:auto;scrollbar-width:thin}
+.xqprog-evrow{display:flex;gap:8px;line-height:1.5}
+.xqprog-evrow .t{flex:none;color:var(--os-muted);font-variant-numeric:tabular-nums}
+.xqprog-evrow .m{color:var(--os-text);min-width:0;word-break:break-word}
+/* 「终止抓取」按钮(2026-09-29 用户口径: "抓取大V那个又停住了, 给个终止按钮")。
+   margin-left:auto 把它推到状态行最右边; 行本身是 flex-wrap:wrap, 窄屏它会自己落到第二行。
+   严格只在"真在跑/疑似卡住"时才由 app.js 画出来 —— 空闲时不该出现。 */
+.xqprog-stop{margin-left:auto;flex:none}
+/* 「收起 / 展开」按钮 + 收起态(2026-09-30 用户口径: "终止抓取后就关闭呗, 不然看着碍眼")。
+   收起只藏"高"的那两块(药丸墙 / 最近动静), 头行那一句话现状 + 计数留着 —— 既不再占半屏,
+   也还看得出"上一轮为什么停的"。 */
+.xqprog-fold{margin-left:auto;flex:none;text-decoration:none;padding:0 4px}
+.xqprog-stop + .xqprog-fold{margin-left:6px}
+.xqprog-collapsed .xqprog-wall,.xqprog-collapsed .xqprog-ev{display:none}
+@media (max-width:560px){
+  .xqprog-ev{max-height:160px}
+  /* 63 个大V在窄屏要排十几行, 给个上限免得把「关注动态」整块挤到一屏之外 */
+  .xqprog-wall-in{max-height:132px;overflow-y:auto;scrollbar-width:thin}
+}
+html.theme-light .chip.stock-chip:hover{color:var(--os-text)}
+/* 统一时间线信息流 */
+.feed{display:flex;flex-direction:column;gap:10px}
+.feed-item{background:var(--os-surface-2);border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:10px 13px}
+.feed-item .post-text{margin-top:4px}
+.feed-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.feed-v{font-weight:700;font-size:13px;color:var(--os-text)}
+.feed-time{font-size:11px;color:var(--os-muted);font-variant-numeric:tabular-nums}
+/* 2026-09-20 瘦身: 原 .feed-empty / .scroll-flow 两条选择器全项目 0 命中(HTML/JS 都没这个类名),
+   ==== 连同下面 .jstock-list 一起删掉。删除前已按"整词"在 index.html + app.js 里查过, 不是动态拼接。 */
+#xueqiuPosts .feed{max-height:min(56vh,580px);overflow-y:auto;overscroll-behavior:contain;padding-right:8px;scrollbar-width:thin}
+.xq-pager{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:8px}
+.xq-pager .btn{min-width:82px}
+.xq-pager-info{font-size:12px}
+
+/* 设置抽屉(自托管抽屉, 与 app.js openSettings/closeSettings 配合) */
+.drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);opacity:0;visibility:hidden;transition:.25s;z-index:1040}
+.drawer-backdrop.open{opacity:1;visibility:visible}
+.drawer{position:fixed;top:0;right:0;height:100vh;width:460px;max-width:94vw;background:var(--os-surface);border-left:1px solid var(--os-border);
+  box-shadow:none;z-index:1050;transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column}
+.drawer.open{transform:translateX(0);box-shadow:-20px 0 50px rgba(0,0,0,.55)}
+.drawer-header,.offcanvas-header{padding:16px 20px;border-bottom:1px solid var(--os-border);display:flex;justify-content:space-between;align-items:center;font-size:16px;font-weight:700}
+.btn-add-watch{margin-left:auto;margin-right:12px;flex:none;font-size:12px;font-weight:600;line-height:1;padding:6px 14px;border-radius:var(--r-pill);border:1px solid var(--accent);color:var(--accent);background:transparent;cursor:pointer;transition:background .15s,color .15s}
+.btn-add-watch:hover{background:var(--accent);color:var(--accent-ink)}
+/* 「＋候选池」与「＋观察池」并排(2026-09-27): 外观沿用同一套, 只把"推到最右"的 auto 让给第一枚,
+   否则两枚之间会被撑开一段, 看着像两个不相干的东西。 */
+.btn-add-watch.btn-add-cand{margin-left:0}
+.btn-add-watch:disabled{opacity:.5;cursor:default}
+.drawer-body,.offcanvas-body{flex:1;overflow-y:auto;padding:18px 20px}
+.set-section{margin-bottom:22px}
+.set-section h4{margin:0 0 12px;font-size:13px;color:var(--accent);font-weight:600;border-left:3px solid var(--accent);padding-left:9px}
+.sh-sub{color:var(--os-muted);font-size:11px;font-weight:500}
+.sh-sub.up{color:var(--up)}
+.sh-sub.down{color:var(--down)}
+.hk-ex{font-size:10px;font-weight:600;color:var(--os-muted);margin-top:2px;line-height:1.25;display:flex;align-items:center;gap:4px;white-space:nowrap}
+.hk-ex.warn{color:var(--warn,#f59e0b)}
+.hk-ex.past{color:var(--os-muted);font-weight:500}
+.hk-ex .dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none;display:inline-block}
+.hk-alert-item{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--os-border)}
+.hk-alert-item:last-child{border-bottom:none}
+.hk-alert-item .tag{flex:none;padding:2px 8px;border-radius:var(--r-tag);font-size:11px;font-weight:700;color:var(--warn,#f59e0b);border:1px solid currentColor;background:transparent}
+.hk-alert-item .tt{font-weight:600;font-size:13px}
+.hk-alert-item .dd{font-size:11px;color:var(--os-muted);margin-top:1px;line-height:1.4}
+/* 打新截止日提醒(2026-09-30): 复用上面 .hk-alert-item 的版式, 只补两个专属件。
+   ⛔ 颜色不碰红/绿 —— 那两色在本站是**涨跌专用**(A股口径 红=涨/好), 拿去标"急"会读反。
+   "今天截止"用 --warn(琥珀) 加实心底, 是**紧急**而不是"跌"。 */
+.hk-alert-item .tag.urgent{color:var(--accent-ink);background:var(--warn);border-color:var(--warn)}
+.hk-alert-item .ipo-mkt{font-size:11px;font-weight:600;color:var(--os-muted);margin-left:6px;
+  padding:1px 6px;border:1px solid var(--os-border);border-radius:var(--r-tag);letter-spacing:.02em}
+
+.num-main{font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2;white-space:nowrap}
+.num-sub{font-size:11px;font-weight:500;color:var(--os-muted);margin-top:2px;line-height:1.2}
+.num-sub.up{color:var(--up)}
+.num-sub.down{color:var(--down)}
+td > .num-main + .num-sub{display:block}
+#holdingsTable td.num{white-space:nowrap}
+/* 股票名称一律**单行**(2026-09-26 用户: "不要让股票名字跨行, 难看")。整张表是 table-layout:fixed
+   + colgroup 写死百分比, 而 #holdingsTable 的 min-width:680px 让名称格在窄容器/横向滚动时只剩
+   ~97px ⇒ "中国光大水务""联合能源集团"被从中间折断。宁可省略号也不许换行: 全名进 <b> 的 title
+   (见 app.js nameCell), 下面那行 .sh-sub(港股除净标注)本来就是独立第二行, 是设计不是跨行。
+   光 nowrap 会把名字截成"中国光…"也难看的, 所以同一天把名称列 14.3%→16.3%(从"成本/股"匀 2pp,
+   它实测富余 35px)+首列 padding 20/12→12/8: 六字名要 84px, 改完可用 91px, 实测 1024/1440 两档
+   0 截断(_out/_shot_hold_rows.py)。省略号从此只是**更长名字的兜底**。
+   ⛔ 2026-10-02 起名称列只有 12.2%(572px 下 70px): A 股名(≤5 字, 实测 68px)照常全显,
+   六字港股名会走省略号兜底(全名在 title 里) —— 这一行总共 572px 要装 8 列, 只能这么分。 */
+#holdingsTable td:first-child{overflow:hidden;padding-left:12px;padding-right:8px}
+#holdingsTable td:first-child > b{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 表头那一格跟着收窄, 否则"名称"比下面的名字缩进 8px 看着错位 */
+#holdingsTable thead th:first-child{padding-left:12px;padding-right:8px}
+/* 持仓表: 把「整列都看得见」所需的宽度压下来(2026-10-02)。数字全是实测的:
+   字号 14→12、内边距 12px 8px/12px → 12px 4px(首列留 12/8) ⇒ 全表 need 701 → 543。 */
+#holdingsTable{font-size:12px}
+#holdingsTable th,#holdingsTable td{padding:12px 4px}
+#holdingsTable th:first-child,#holdingsTable td:first-child{padding:12px 8px 12px 12px}
+/* 「建议」那格是全表最宽的一列(chip + 净看空/宏观角标 一行 nowrap, 实测 149px)。只把 chip 与角标
+   收窄一点点 —— **别改成换行**: 实测换行会把行高 61px 顶到 75~92px, 一屏从 7 行掉到 5 行。 */
+#holdingsTable .adv-tag{padding:2px 5px}
+
+/* 首页第一行两栏: 6:6 → 47.5:52.5(2026-10-02)。持仓表要 543px 的内容宽, 而 6:6 在用户视口下只给
+   到 544(卡体宽) —— 让出 2.5% 后持仓卡 574(表 572), 留出余量; 环图那边靠上面 .donut-wrap 的
+   gap 38→24 补回来(实测直径 178 → 164, 只小 14px)。
+   ⚠️ 只在 ≥992px 生效: 更窄时 Bootstrap 本来就把两栏竖着堆叠。1440/1680 上同样不出横滑条。 */
+@media (min-width:992px){
+  .main-duo > .col-lg-6:first-child{flex:0 0 47.5%;max-width:47.5%}
+  .main-duo > .col-lg-6:last-child{flex:0 0 52.5%;max-width:52.5%}
+}
+.drawer-footer,.offcanvas-footer{display:flex;gap:10px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--os-border)}
+
+/* Toast */
+.toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--os-surface);border:1px solid var(--os-border);
+  color:var(--os-text);padding:12px 20px;border-radius:var(--r-card);opacity:0;transition:.25s;pointer-events:none;z-index:100;box-shadow:var(--shadow-float)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{border-color:var(--up)}
+.toast.ok{border-color:var(--accent)}
+.toast.warn{border-color:var(--warn)}
+
+/* 隐藏非激活面板 */
+.panel{display:none}
+.panel.active{display:block}
+
+
+/* ========== OpenStock 风格: 持仓热力图 ========== */
+.heatmap{position:relative;display:block;width:100%;overflow:hidden}
+.heat-tile{border-radius:var(--r-card);padding:12px 13px;display:flex;flex-direction:column;justify-content:space-between;
+  color:#fff;position:absolute;overflow:hidden;border:1px solid rgba(255,255,255,.06);transition:transform .18s cubic-bezier(.2,.7,.3,1.2),box-shadow .18s ease,border-color .18s ease,z-index 0s;box-sizing:border-box;will-change:transform;transform-origin:center}
+.heat-tile:hover{transform:scale(1.055);border-color:rgba(255,255,255,.28);box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:3}
+/* 竖长条格子(分层视图里薄层那一列): 涨跌紧跟名称, 不再被 space-between 拽到最底下留一大片空 */
+.heat-tile.tall{justify-content:flex-start;gap:8px}
+.heat-tile .ht-name{font-weight:700;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.45);line-height:1.2}
+.heat-tile .ht-mkt{font-size:11px;opacity:.85;margin-top:2px;text-shadow:0 1px 3px rgba(0,0,0,.45)}
+.heat-tile .ht-chg{font-size:16px;font-weight:800;text-shadow:0 1px 3px rgba(0,0,0,.45)}
+/* 走深字的那批磁贴(日间 + 涨跌幅度小的浅格子): 上面那套白字+黑投影只在夜间成立, 浅薄荷底上白字实测 1.0:1。
+   哪一格走深字由 app.js 的 heatInk() 逐格算(合成底色比白/深谁更清楚), 这里只负责把颜色和投影一起换掉。
+   边框同理 —— rgba(255,255,255,.06) 在白卡上等于没有。 */
+.heat-tile.ink-dark{color:var(--os-text)}
+.heat-tile.ink-dark .ht-name,.heat-tile.ink-dark .ht-mkt,.heat-tile.ink-dark .ht-chg{text-shadow:none}
+/* 第三档: 同色系近黑。夜间大涨跌的格子(alpha .55~.82)底色本身已经是亮薄荷/亮红, 白和 --os-text(近白)
+   两个候选一起糊 —— 实测 2.64:1。哪一格走这里由 heatInk() 判(和 app.js 的 INK_DEEP 同值)。 */
+.heat-tile.ink-deep{color:#000}
+/* #041410 在夜间最亮的那几格上只有 4.33:1（实测合成底色 rgb(211,71,90)，缺 0.17）。换纯黑后同一格 4.82:1、薄荷格 5.03:1，全部过线。视觉上看不出差别（都是近黑），但对比度是硬指标，别凭感觉换回去。 */
+.heat-tile.ink-deep .ht-name,.heat-tile.ink-deep .ht-mkt,.heat-tile.ink-deep .ht-chg{text-shadow:none}
+html.theme-dark .heat-tile.ink-deep{border-color:rgba(4,20,16,.18)}
+html.theme-light .heat-tile{border-color:rgba(15,23,42,.09)}
+html.theme-light .heat-tile:hover{border-color:rgba(15,23,42,.24)}
+/* 涨跌数字**不吃**全局 .up/.down 的红绿 —— 那两个色是按"压在卡底上"定的, 压在同色系的磁贴上就糊了:
+   夜间 --up #ff5268 落在 rgba(255,82,104,.82) 上实测 1.38:1、--down 落在 .82 的薄荷上 1.42:1(2026-09-24 体检),
+   名字看得清、数字看不见。方向本来就由磁贴底色 + ▲▼ 承担, 所以白字磁贴让数字随格走色(inherit, 最坏 4.34:1);
+   深字磁贴换成同色系压暗版 —— #5e0a17 / #063d35 是在 .22~.82 全透明度档上扫出来的, 最坏 4.97 / 6.88:1。
+   要动这几个值就得重扫一遍对比度, 别凭感觉换。
+   ⚠️ 2026-09-28: --up/--down 的色值换过(#ff5268/#1fd6a3 → #ef5b52/#34ae74), 上面那两个
+   "1.38 / 1.42:1" 是旧值的实测数 —— 结论不变(这条规则的本意就是不让 .up/.down 接管磁贴配色)。 */
+.heat-tile .ht-chg.up,.heat-tile .ht-chg.down{color:inherit !important}
+/* 深色那两个值只在日间成立 —— 夜间 --os-text 本身就是近白, 万一 .ink-dark 是换主题前留下的脏状态,
+   压暗版会糊在暗底上, 所以这里显式绑住 theme-light(配套: app.js 的 applyTheme 会重画一次热力图)。 */
+html.theme-light .heat-tile.ink-dark .ht-chg.up{color:#5e0a17 !important}
+html.theme-light .heat-tile.ink-dark .ht-chg.down{color:#063d35 !important}
+.heat-legend{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--os-muted);margin-top:12px}
+.heat-legend .bar{flex:1;height:8px;border-radius:var(--r-pill);background:linear-gradient(90deg,var(--down),#1b9c7e 45%,var(--os-border) 50%,#c43b50 55%,var(--up))}
+
+/* ========== OpenStock 风格: Cmd/Ctrl+K 命令面板 ========== */
+.cmd-palette{position:fixed;inset:0;z-index:1100;display:none}
+.cmd-palette.open{display:block}
+.cmd-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}
+.cmd-box{position:absolute;top:16%;left:50%;transform:translateX(-50%);width:min(560px,92vw);
+  background:var(--os-surface);border:1px solid var(--os-border);border-radius:var(--r-card);overflow:hidden;box-shadow:var(--shadow-float)}
+.cmd-box input{border:0;border-bottom:1px solid var(--os-border);border-radius:0;background:transparent;padding:16px 16px;font-size:15px;color:var(--os-text)}
+.cmd-box input:focus{box-shadow:none;border-color:var(--accent)}
+.cmd-results{max-height:320px;overflow:auto;padding:6px}
+.cmd-item{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:var(--r-ctl);cursor:pointer;color:var(--os-text)}
+.cmd-item .ci-ico{width:22px;text-align:center;color:var(--os-muted)}
+.cmd-item.active,.cmd-item:hover{background:rgba(var(--accent-rgb),.18)}
+.cmd-empty{padding:18px;text-align:center;color:var(--os-muted);font-size:13px}
+
+/* ========== 抽屉内容: K 线容器 / 明细格 ==========
+   (个股详情右侧弹窗 2026-09-23 已删; 这里剩下的仍被「通用 K 线抽屉」「套利/偏离详情」用着) */
+
+/* K 线容器 */
+/* flex-wrap(2026-09-20): 药丸从 4 档加到 5 档(新增"3年"), 判断校验那行还要同时塞图例+计数,
+   窄屏会顶出容器 —— 允许换行比横向溢出好(溢出会把右边的图例/计数挤到看不见)。 */
+.dt-kline-tabs{display:flex;flex-wrap:wrap;row-gap:4px;gap:6px;margin-bottom:8px;align-items:center}
+.dt-kline-tabs .btn-tab{background:rgba(148,163,184,.08);border:1px solid var(--os-border);color:var(--os-text);font-size:12px;font-weight:600;padding:4px 13px;border-radius:var(--r-pill);cursor:pointer;transition:all .15s}
+.dt-kline-tabs .btn-tab:hover{background:rgba(var(--accent-rgb),.18);border-color:var(--accent)}
+.dt-kline-tabs .btn-tab.active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+/* 判断校验K线: 圆点图例 + 「几点/几条」覆盖计数(左列表有发言却找不到点时用来解释) */
+.jk-legend{display:inline-flex;align-items:center;gap:3px;margin-left:auto;font-size:11px;color:var(--os-muted);cursor:help;white-space:nowrap}
+.jk-legend .jl-d{width:7px;height:7px;border-radius:50%;display:inline-block;margin-left:6px}
+.jk-legend .jl-d:first-child{margin-left:0}
+.jk-legend .jl-d.up{background:var(--up)}
+.jk-legend .jl-d.down{background:var(--down)}
+.jk-legend .jl-d.amb{background:#f59e0b}
+/* 持续(长期看好榜)图例: 空心圆 */
+.jk-legend .jl-d.sus{background:transparent;border:1.5px solid var(--os-muted);box-sizing:border-box}
+.jk-count{font-size:11px;color:var(--os-muted);font-variant-numeric:tabular-nums;white-space:nowrap;cursor:help}
+.dt-kline-status{font-size:11px;margin-bottom:6px;font-family:ui-monospace,monospace}
+.dt-kline-canvas{position:relative;height:240px;width:100%}
+.dt-item{background:var(--os-surface-2);border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:9px 11px}
+.dt-item .dt-k{font-size:11px;color:var(--os-muted);margin-bottom:3px}
+.dt-item .dt-v{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.dt-h{font-size:13px;color:var(--accent);margin:16px 0 10px;font-weight:600;border-left:3px solid var(--accent);padding-left:9px}
+
+/* 日间模式下的局部微调 (深色硬编码块改为浅色) */
+html.theme-light .topbar{background:color-mix(in srgb,var(--os-surface) 86%,transparent)}
+html.theme-light .top-tabs{background:rgba(15,23,42,.06);border-color:var(--os-border)}
+html.theme-light .top-tabs .tab{color:#475569}
+html.theme-light .top-tabs .tab:hover{color:#1f2937;background:rgba(15,23,42,.08)}
+html.theme-light .top-tabs .tab.active{color:var(--accent-ink);background:var(--accent)}
+html.theme-light .btn-icon{background:#fff;border-color:var(--os-border);color:#334155}
+html.theme-light .btn-icon:hover{background:rgba(var(--accent-rgb),.12);border-color:var(--accent);color:var(--accent)}
+html.theme-light .btn-icon.active{background:rgba(var(--accent-rgb),.18);border-color:var(--accent);color:var(--accent)}
+html.theme-light .post,
+html.theme-light .feed-item,
+html.theme-light .v-chip{background:rgba(15,23,42,.05);border-color:var(--os-border)}
+html.theme-light .v-chip.active{background:rgba(var(--accent-rgb),.14);border-color:var(--accent)}
+html.theme-light .chip.stock-chip:hover{background:rgba(var(--accent-rgb),.18)}
+
+/* ============ 主页3 · 判断校验 ============ */
+/* ===== 判断页: 左滚动列表+池切换 · 右K线(悬停竖线浮意见) ===== */
+.jpart{border:1px solid transparent;border-radius:var(--r-ctl);padding:4px;
+  background:transparent;margin-bottom:0}
+.jpart[data-step="1"]{margin-bottom:0}
+.jpart .subheader{margin-top:0}
+/* 左: 池切换 + 股票滚动列表 */
+/* 通用 tab 药丸(池切换/K线窗/命中榜头 共用) */
+.btn-tab{font-family:inherit;background:rgba(148,163,184,.08);border:1px solid transparent;color:var(--os-muted);
+  font-size:12px;font-weight:600;padding:5px 13px;border-radius:var(--r-pill);cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn-tab:hover{color:var(--os-text);background:rgba(var(--accent-rgb),.16);border-color:var(--accent)}
+.btn-tab.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+html.theme-light .btn-tab.active{background:var(--accent)}
+.jpool-tabs{display:flex;align-items:center;gap:3px;margin-bottom:8px;flex-wrap:wrap;
+  background:var(--os-surface-2);border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:3px}
+html.theme-light .jpool-tabs{background:#eef1f6}
+.jpool-tabs .btn-tab{background:transparent;border-color:transparent;flex:1;text-align:center}
+.jpool-tabs .btn-tab.active{background:var(--accent);color:var(--accent-ink)}
+.jpool-tabs .btn-tab:not(.active):hover{background:rgba(255,255,255,.06);border-color:transparent;color:var(--os-text)}
+html.theme-light .jpool-tabs .btn-tab:not(.active):hover{background:rgba(15,23,42,.08)}
+/* 寻找机会(套利 + 超跌池): LOF 溢价/折价 <-> A股超跌池 切换药丸 */
+/* 卡头(2026-09-29): 现在有**四个**子视图药丸 + 各自的按钮/时戳同住一行, 宽屏下也得允许换行 ——
+   否则一行塞不下时 flex 不会折行, 直接把卡片顶出屏幕(实测 1280 下横向溢出, 元凶是那条长状态 +
+   一堆按钮)。窄屏那条同名规则在下面 @media(max-width:768px) 里, 只管药丸独占一行, 不含本意。 */
+#tab-opp .card-header{flex-wrap:wrap;row-gap:4px}
+#tab-opp #oppSub{flex:0 0 auto;white-space:nowrap}
+.opp-tabs{display:inline-flex;align-items:center;gap:3px;margin-left:10px;
+  background:var(--os-surface-2);border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:3px}
+html.theme-light .opp-tabs{background:#eef1f6}
+.opp-tabs .btn-tab{background:transparent;border-color:transparent}
+.opp-tabs .btn-tab.active{background:var(--accent);color:var(--accent-ink)}
+.opp-tabs .btn-tab:not(.active):hover{background:rgba(255,255,255,.06);border-color:transparent;color:var(--os-text)}
+html.theme-light .opp-tabs .btn-tab:not(.active):hover{background:rgba(15,23,42,.08)}
+.jstock-scroll{display:flex;flex-direction:column;gap:5px;max-height:520px;overflow-y:auto;
+  overscroll-behavior:contain;padding:8px;scrollbar-width:thin;
+  border:1px solid var(--os-border);border-radius:var(--r-ctl);background:var(--os-surface-2)}
+html.theme-light .jstock-scroll{background:#f3f5f9}
+/* 命中榜条(大V+准确率) 横置于列表与K线上方, 榜单卡 */
+.jvboard{border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:11px 12px 9px;margin:0 0 12px;
+  background:linear-gradient(180deg,rgba(var(--accent-rgb),.05),rgba(255,255,255,0)) , var(--os-surface-2);
+  box-shadow:0 1px 0 rgba(255,255,255,.02) inset}
+html.theme-light .jvboard{background:var(--os-surface)}
+.jvboard-head{display:flex;align-items:center;gap:8px;margin-bottom:2px;flex-wrap:wrap}
+.jvboard-head .t{font-size:13px;font-weight:700;color:var(--os-text)}
+.jvboard-head .t.focus{color:var(--accent)}
+.js-spacer{flex:1}
+.jvboard-head .jv-all{margin-left:auto;font-size:11px;padding:3px 12px;border-radius:var(--r-pill);white-space:nowrap}
+.jvboard-scroll{display:flex;gap:8px;overflow-x:auto;padding:6px 1px 6px;margin-top:2px;
+  scrollbar-width:thin;align-items:stretch}
+/* 排名 pill: 两行(hit%+名) - 迷你命中条 - 副行(样本) */
+.jv-chip{display:flex;gap:8px;align-items:center;flex:none;text-align:left;min-width:150px;max-width:186px;
+  border:1px solid var(--os-border);background:var(--os-surface-2);border-radius:var(--r-ctl);padding:6px 10px;
+  cursor:pointer;transition:border-color .15s,background .15s,transform .12s,box-shadow .15s}
+html.theme-light .jv-chip{background:#fff}
+.jv-chip:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:var(--shadow-pop)}
+.jv-chip.active{border-color:var(--accent);background:rgba(var(--accent-rgb),.14);box-shadow:0 0 0 1px var(--accent)}
+.jv-chip.jv-chip-wk{opacity:.6;border-style:dashed}
+.jv-chip.jv-chip-wk:hover{opacity:1}
+.jv-rank{font-style:normal;font-size:11px;font-weight:800;color:var(--os-muted);flex:none;
+  min-width:17px;height:17px;line-height:17px;text-align:center;border-radius:var(--r-tag);
+  background:rgba(148,163,184,.15);font-variant-numeric:tabular-nums}
+/* 金/银两档原来是白字压在金属渐变上: 渐变中点实测只有 ~2.4:1(日间的"2"几乎糊没, 2026-09-25 截图复核),
+   因为 #e9b949 / #cbd5e1 这两个起点本身就是浅色。换成同色系深墨 → 中点 5.9 / 6.0:1, 金属感靠渐变本身保住。
+   铜牌(#b78468→#92400e)中点 4.6:1 达标, 白字照旧。 */
+.jv-chip:nth-child(1) .jv-rank{color:#3b2604;background:linear-gradient(135deg,#e9b949,#d97706)}
+.jv-chip:nth-child(2) .jv-rank{color:#233043;background:linear-gradient(135deg,#cbd5e1,#7c8aa5)}
+.jv-chip:nth-child(3) .jv-rank{color:#fff;background:linear-gradient(135deg,#b78468,#92400e)}
+html.theme-light .jv-chip:nth-child(1) .jv-rank{background:linear-gradient(135deg,#e9b949,#b45309)}
+html.theme-light .jv-chip:nth-child(2) .jv-rank{background:linear-gradient(135deg,#cbd5e1,#64748b)}
+html.theme-light .jv-chip:nth-child(3) .jv-rank{background:linear-gradient(135deg,#b78468,#7c2d12)}
+.jv-chip .jv-b{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.jv-chip .jv-top{display:flex;align-items:baseline;gap:6px;justify-content:space-between}
+.jv-chip .jv-n{font-size:12px;font-weight:700;color:var(--os-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jv-chip .jv-r{font-size:13px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;flex:none}
+.jv-chip .jv-meter{display:block;height:3px;border-radius:var(--r-tag);background:rgba(148,163,184,.18);overflow:hidden}
+.jv-chip .jv-meter-fill{display:block;height:100%;border-radius:var(--r-tag);background:linear-gradient(90deg,var(--accent),#22d3ee)}
+html.theme-light .jv-chip .jv-meter-fill{background:linear-gradient(90deg,var(--accent),#0e7490)}
+.jv-chip .jv-meter.jv-meter-empty{height:3px;border:1px dashed rgba(148,163,184,.3)}
+.jv-chip .jv-sub{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--os-muted);font-variant-numeric:tabular-nums}
+.jv-chip .jv-sub i{font-style:normal}
+.jv-chip .jv-sub em{font-style:normal;font-weight:700;color:var(--warn)}
+/* 大V聚焦提示条(池标签与列表之间) */
+.jvfilter-bar{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--os-text);
+  background:linear-gradient(90deg,rgba(99,132,255,.12),rgba(99,132,255,.04));
+  border:1px solid rgba(var(--accent-rgb),.5);border-radius:var(--r-ctl);padding:4px 9px;margin:0 0 6px;line-height:1.4}
+.jvfilter-bar b{color:var(--accent)}
+/* 判断校验 · 左侧标的搜索框(2026-09-30 用户口径「个股太多了」)。纯本地过滤当前切片 ——
+   样式只用全站那套变量, 深浅色都跟着走; 大V新发现池实测 636 只, 没搜索框只能靠滚。 */
+.jsearch{display:flex;align-items:center;gap:6px;background:var(--os-surface-2);border:1px solid var(--os-border);
+  border-radius:var(--r-ctl);padding:4px 8px;margin:0 0 6px;transition:border-color .15s,box-shadow .15s}
+html.theme-light .jsearch{background:#fff}
+.jsearch:focus-within{border-color:var(--accent);box-shadow:0 0 0 1px rgba(var(--accent-rgb),.35)}
+.jsearch input{flex:1 1 auto;min-width:0;background:transparent;border:0;outline:0;padding:1px 0;
+  color:var(--os-text);font-family:inherit;font-size:12px;line-height:1.5}
+.jsearch input::placeholder{color:var(--os-muted)}
+.jsearch input::-webkit-search-cancel-button{display:none}   /* 与自带的清空按钮重复, 藏掉它 */
+.jsearch .jsearch-n{flex:none;font-size:10px;color:var(--os-muted);font-variant-numeric:tabular-nums}
+.jsearch .jsearch-x{flex:none;width:18px;height:18px;line-height:1;padding:0;border:0;border-radius:var(--r-pill);
+  background:rgba(148,163,184,.16);color:var(--os-muted);font-size:13px;cursor:pointer;transition:all .15s}
+.jsearch .jsearch-x:hover{background:rgba(var(--accent-rgb),.22);color:var(--os-text)}
+.jsearch-none{padding:2px 2px}
+.jrow{display:flex;align-items:center;gap:7px;width:100%;text-align:left;border:1px solid var(--os-border);
+  background:var(--os-surface);border-radius:var(--r-ctl);padding:7px 10px;cursor:pointer;
+  transition:border-color .15s,background .15s,transform .12s,box-shadow .15s;line-height:1.5}
+html.theme-light .jrow{background:#fff}
+.jrow:hover{border-color:var(--accent);transform:translateY(-1px)}
+.jrow.active{border-color:var(--accent);background:linear-gradient(90deg,rgba(var(--accent-rgb),.18),rgba(var(--accent-rgb),.06));
+  box-shadow:0 0 0 1px var(--accent) inset}
+html.theme-light .jrow.active{background:linear-gradient(90deg,rgba(var(--accent-rgb),.13),rgba(var(--accent-rgb),.04))}
+.jrow .jrow-name{font-size:13px;font-weight:650;color:var(--os-text);flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jrow .jrow-mkt{font-size:10px;color:var(--os-muted);flex:none;font-variant-numeric:tabular-nums;letter-spacing:.2px}
+.jrow .jrow-bits{display:flex;gap:5px;flex:none;align-items:center;font-variant-numeric:tabular-nums}
+.jrow .jrow-bits i{font-style:normal;font-size:10px;font-weight:700;padding:1px 6px;border-radius:var(--r-tag);line-height:1.6;white-space:nowrap}
+.jrow .jrow-bits .chip-bull{color:var(--on-tint-up);background:color-mix(in srgb,var(--up) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--up) 25%,transparent)}
+.jrow .jrow-bits .chip-bear{color:var(--on-tint-down);background:color-mix(in srgb,var(--down) 13%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--down) 22%,transparent)}
+
+
+.jrow .jrow-bits .chip-mention{color:var(--warn);background:rgba(245,158,11,.13);box-shadow:inset 0 0 0 1px rgba(245,158,11,.22)}
+.jrow .jrow-bits .chip-sus{color:var(--accent);background:rgba(var(--accent-rgb),.14);border:1px dashed rgba(var(--accent-rgb),.5);cursor:help;white-space:nowrap}
+/* 主分栏: 左列表右K线 */
+.judge-split{display:grid;grid-template-columns:minmax(240px,320px) 1fr;gap:14px;align-items:stretch}
+.judge-left{display:flex;flex-direction:column;gap:6px;min-width:0}
+.judge-right{display:flex;flex-direction:column;gap:8px;min-width:0}
+.judge-right .jtrend{flex:1}
+.judge-split .jtrend-cv{height:490px}
+@media (max-width:820px){.judge-split{grid-template-columns:1fr}.judge-split .jtrend-cv{height:320px}.jstock-scroll{max-height:280px}}
+/* (原 .jline-pop / .jline-ohlc / .jlp-* 一套: 判断校验 K 线的意见卡与右上角逐条 —— 2026-09-29 起统一到
+   static/votes_kline.css, 本页只保留上面 :root 里的 --vk-* 令牌来选皮/选色。⚠️ 别在这里再写第二份;
+   跟着改的老毛病就是"两边各修各的", 判断校验因此一直停在"点开钉不住、卡滚不动、没有 ✕"。)
+.badge-kind{border-radius:var(--r-tag);padding:0 5px;font-size:10px;font-weight:600;margin-right:4px}
+.badge-first{background:rgba(var(--accent-rgb),.18);color:var(--accent)}
+.badge-rev{background:rgba(255,159,67,.18);color:#ffb15e}
+.badge-revive{background:rgba(167,139,250,.18);color:#c4b5fd}
+.badge-sustain{background:rgba(var(--accent-rgb),.16);color:var(--accent)}
+.badge-dir{border-radius:var(--r-tag);padding:0 5px;font-size:10px;font-weight:700}
+.badge-bull{background:color-mix(in srgb,var(--up) 16%,transparent);color:var(--on-tint-up)}
+.badge-bear{background:color-mix(in srgb,var(--down) 16%,transparent);color:var(--on-tint-down)}
+.badge-mention{background:rgba(245,158,11,.15);color:var(--warn)}
+/* K线 */
+.jtrend{border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:10px;
+  background:linear-gradient(180deg,rgba(255,255,255,.012),rgba(255,255,255,0)), var(--os-surface-2);
+  box-shadow:0 1px 0 rgba(255,255,255,.02) inset}
+html.theme-light .jtrend{background:#fff}
+.jtrend-cv{width:100%;height:380px;position:relative;display:flex;align-items:center;justify-content:center;
+  border:1px solid rgba(128,128,128,.06);border-radius:var(--r-ctl);overflow:hidden}
+html.theme-light .jtrend .jtrend-cv{border-color:rgba(0,0,0,.04)}
+.jtrend-empty{color:var(--os-muted);text-align:center;padding:30px 0;font-size:13px}
+/* 判断K线上方标题: 名称 + 市场 */
+.jtrend-title{font-size:13px;font-weight:700;padding:2px 2px 8px;color:var(--os-text);display:flex;align-items:baseline;gap:6px}
+.jtrend-title .jt-mkt{font-size:11px;font-weight:500;color:var(--os-muted)}
+/* 涨跌标签色 */
+.up{color:var(--up)!important}.down{color:var(--down)!important}
+html.theme-light .badge-first{background:rgba(var(--accent-rgb),.12);color:var(--accent-on-tint)}
+html.theme-light .badge-rev{background:rgba(234,88,12,.12);color:#9a3412}
+html.theme-light .badge-revive{background:rgba(147,51,234,.12);color:#6b21a8}
+html.theme-light .badge-sustain{background:rgba(var(--accent-rgb),.12);color:var(--accent-on-tint)}
+
+
+html.theme-light .badge-mention{background:rgba(217,119,6,.14);color:#b45309}
+
+/* 净值口径徽标: 估=按底层实时推算(蓝) / 官=官方最新净值(灰) */
+.stamp{display:inline-block;vertical-align:1px;border-radius:var(--r-tag);padding:0 4px;font-size:10px;font-weight:700;line-height:1.5;margin-right:3px}
+.stamp-est{background:rgba(var(--accent-rgb),.2);color:var(--accent-on-tint)}
+.stamp-nav{background:rgba(138,143,152,.2);color:#9aa1ab}
+.stamp-basket{background:rgba(245,158,11,.18);color:#f0b429}
+html.theme-light .stamp-est{background:rgba(37,99,235,.13);color:#1d4ed8}
+html.theme-light .stamp-nav{background:rgba(100,108,120,.16);color:#4b5563}
+html.theme-light .stamp-basket{background:rgba(217,119,6,.15);color:#b45309}
+
+/* 关注动态: AI 整理视图 */
+.ai-card{background:var(--os-surface);border:1px solid var(--bd, rgba(148,163,184,.16));border-radius:var(--r-ctl);padding:12px 14px;margin-top:10px}
+.ai-part-h{font-weight:700;font-size:13px;color:var(--accent);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--bd, rgba(148,163,184,.16))}
+.ai-sec-h{margin:10px 0 6px;font-weight:700;font-size:12px;color:#e8eaed}
+.ai-sub-h{margin:8px 0 3px;font-weight:700;font-size:12px;color:#c3c9d4}
+.ai-ul{margin:0 0 4px;padding-left:18px}
+.ai-ul li{font-size:12px;line-height:1.65;color:var(--os-text,#d5d9e0);margin:2px 0}
+.ai-p{font-size:12px;color:var(--os-muted,#8b98ad);margin:4px 0}
+.ai-hit{font-size:11px;color:var(--accent);background:rgba(var(--accent-rgb),.12);border-radius:var(--r-tag);padding:4px 8px;margin-bottom:8px}
+html.theme-light .ai-sec-h{color:#1f2430}
+html.theme-light .ai-sub-h{color:#3a4150}
+html.theme-light .ai-ul li{color:#2a3140}
+html.theme-light .ai-hit{color:#1d4ed8}
+
+/* ① 大V对大盘的看法(2026-09-16): 评分 0~100(50=多空均衡) + 多空占比条 + 可折叠逐人明细
+   颜色沿用 A 股习惯: 偏多红 --up / 偏空绿 --down / 分歧琥珀 --warn */
+.xq-mk-score{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums;margin-left:8px}
+.xq-mk-score small{font-size:10px;font-weight:600;color:var(--os-muted);margin-left:2px}
+.xq-mk-word{font-size:11px;font-weight:700;border:1px solid currentColor;border-radius:var(--r-tag);padding:0 6px;margin-left:7px;vertical-align:2px}
+.xq-mk-score.hi,.xq-mk-word.hi{color:var(--up)}
+.xq-mk-score.lo,.xq-mk-word.lo{color:var(--down)}
+.xq-mk-score.mid,.xq-mk-word.mid{color:var(--warn)}
+.xq-mk-n{font-size:11px;font-weight:400;color:var(--os-muted);margin-left:8px}
+.xq-mk-bar{display:flex;height:7px;border-radius:var(--r-tag);overflow:hidden;background:var(--os-border);margin:2px 0 9px}
+.xq-mk-bar i{display:block;min-width:0}
+.xq-mk-bar i.b{background:var(--up)}
+.xq-mk-bar i.s{background:var(--down)}
+.xq-mk-bar i.n{background:var(--os-muted);opacity:.45}
+.xq-mk-basis{font-size:12px;line-height:1.6;color:var(--os-text);margin-bottom:7px}
+.xq-mk-empty{font-size:12px;color:var(--os-muted)}
+.xq-mk-det>summary{cursor:pointer;font-size:12px;color:var(--accent);outline:none}
+.xq-mk-list{margin-top:6px;display:flex;flex-direction:column;gap:4px;max-height:264px;overflow-y:auto}
+.xq-mk-row{display:flex;align-items:baseline;gap:7px;font-size:12px;color:var(--os-muted)}
+.xq-mk-row i{flex:0 0 auto;font-style:normal;font-weight:700;font-size:11px;line-height:1.6;border-radius:var(--r-tag);padding:0 5px;color:var(--on-up)}
+.xq-mk-row i.xq-mk-bull{background:var(--up);color:var(--on-up)}
+.xq-mk-row i.xq-mk-bear{background:var(--down);color:var(--on-down)}
+.xq-mk-row i.xq-mk-neu{background:var(--os-muted);color:var(--os-bg)}
+.xq-mk-row b{flex:0 0 auto;font-weight:600;color:var(--os-text)}
+.xq-mk-row span{flex:1 1 auto;min-width:0}
+.xq-mk-row em{flex:0 0 auto;font-style:normal;font-variant-numeric:tabular-nums;opacity:.75}
+
+/* 金额隐私: 眼睛按钮 toggle body.money-hidden 后模糊金额, 其余数据不受影响 */
+body.money-hidden #sumValue,
+body.money-hidden #sumPnl,
+body.money-hidden #dayPnlCell,
+body.money-hidden #sumAsset,
+body.money-hidden .amt{
+  filter: blur(6px);
+  -webkit-filter: blur(6px);
+  user-select: none;
+}
+
+
+
+/* 2026-09-20 瘦身: 原「模块3 · 命中榜(大V准确率)」14 条 .acc-* 规则全项目 0 命中 ——
+   命中榜 UI 已经下线(/api/xueqiu/accuracy 还在, 但页面不再渲染这套结构), 样式是残留。整段删除。
+   若以后要恢复命中榜界面, 备份在 _bak\static\style.css.bak_b2_20260920-0910。 */
+
+/* ===== 模块2 · 宏观预览 ===== */
+/* 实时↔日K 切换: 从 macro 卡头移出为视口右下角的悬浮浮层(2026-09-16 用户要求 —— 原 card-header 整行空白太占地方);
+   放在 section#tab-macro 内, 靠 .panel{display:none} 随 tab 一起隐藏, 切到别的 tab 不会残留 */
+.macro-fab{position:fixed;right:18px;bottom:18px;z-index:1020;display:flex;align-items:center;gap:8px;
+  background:var(--os-surface);border:1px solid var(--os-border);border-radius:var(--r-ctl);
+  padding:6px 8px 6px 12px;box-shadow:0 12px 32px rgba(0,0,0,.4)}
+html.theme-light .macro-fab{box-shadow:var(--shadow-pop)}
+.macro-fab #macroTime{font-size:11px;color:var(--os-muted);white-space:nowrap}
+@media (max-width:768px){
+  .macro-fab{right:12px;bottom:calc(62px + env(safe-area-inset-bottom));padding:5px 6px 5px 10px}
+}
+/* 模块2 统一分节: 每节一张 sub-card(统一背景/圆角/内边距), JS 动态分组同用此类 → 全节风格一致 */
+.mg-sec{margin-bottom:14px;background:var(--os-surface-2);border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:12px 14px}
+html.theme-light .mg-sec{background:#f6f7fb}
+.mg-sec-h{display:flex;align-items:center;gap:10px;margin:0 0 10px;flex-wrap:wrap}
+.mg-sec-t{font-size:12px;font-weight:800;color:var(--os-text);border-left:3px solid var(--accent);padding-left:8px;letter-spacing:.02em;white-space:nowrap}
+.mg-sec-r{margin-left:auto;font-size:11px;color:var(--os-muted);display:flex;gap:8px;align-items:center;min-width:0}
+/* 卡中卡: tile 用主 surface 从分节底上浮起 */
+.mg-sec .mg-tile,.mg-sec .mg-kcard{background:var(--os-surface)}
+html.theme-light .mg-sec .mg-tile,html.theme-light .mg-sec .mg-kcard{background:#fff}
+.mg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(188px,1fr));gap:10px}
+/* 估值温度 + TACO 概率横向并列: 两块各占一半(2026-09-16 用户调整), 窄屏自动堆叠 */
+.val-plus-taco{display:flex;gap:56px;flex-wrap:wrap;align-items:stretch}
+.val-plus-taco>#macroValCards{flex:1 1 0;min-width:0}
+.mg-subsec{flex:1 1 0;min-width:300px}
+.mg-subsec-h{display:flex;align-items:center;gap:8px;margin:0 0 8px;flex-wrap:wrap}
+.mg-subsec-t{font-size:11px;font-weight:700;color:var(--os-muted);letter-spacing:.02em;white-space:nowrap}
+.mg-tile{background:var(--os-surface-2);border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.mg-tile.mg-off{opacity:.62}
+.mg-name{font-size:12px;color:var(--os-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mg-name .mg-n{color:var(--warn);font-size:10px;margin-left:4px}
+/* 角标 .mg-n 原来只在 .mg-name 下才生效。偏离度表里的 指数/ST/深跌 直接挂在 <td> 上 → 那条规则不匹配,
+   角标画不出来、看着像名字的一部分; 而且"深跌"当时写的是 var(--danger) —— 主面板从没定义过这个变量(那是详情页那套
+   --tx/--tx3/--danger 的命名), 声明整条静默失效。2026-09-24 体检一并修: 补一条不依赖 .mg-name 的同值通用版
+   (同值 = 宏观格那边视觉一字不变), 颜色改回本面板自己的 token。属性名与上面严格一致, 别加 font-weight 之类会漏进宏观格的属性。 */
+.mg-n{color:var(--warn);font-size:10px;margin-left:4px}
+.mg-n.bad{color:var(--down)}
+.mg-px{font-size:18px;font-weight:700;color:var(--os-text);font-variant-numeric:tabular-nums;line-height:1.2;white-space:nowrap}
+.mg-px-unit{font-size:12px;font-weight:400;color:var(--os-muted);margin-left:3px}
+.mg-row2{display:flex;align-items:center;gap:6px}
+.mg-pct{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;padding:1px 6px;border-radius:var(--r-tag);line-height:1.5}
+/* 白字色需 !important 对抗全局 .up/.down 的 !important, 否则红底红字不可读 */
+.mg-pct.up{color:var(--on-up)!important;background:var(--up)}
+.mg-pct.down{color:var(--on-down)!important;background:var(--down)}
+/* 2026-09-28: 这条补丁撤了。它当年是给"霓虹亮色令牌 + 白字"擦屁股的(白字压亮红只有 3.15:1);
+   现在墨色交给 --on-up / --on-down 两个令牌按主题给(夜间 = 墨黑, 日间 = 白), 实测 5.4 / 5.8:1,
+   一条规则管两边, 不必再按主题各写一套。 */
+.mg-pct.flat{color:var(--os-muted);background:rgba(128,128,128,.16)}
+.mg-unit{font-size:11px;color:var(--os-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 中债/美债卡: 同一格里把 1Y/10Y/30Y 排成一条迷你收益率曲线(2026-09-30)。
+   三行「期限 | 数值」等宽数字左对齐, 10Y 那行放大加粗当主值 ——
+   ⛔ 别再改回"大数字 + 底线再排一遍 10Y": 同一个值在同一格里印两遍, 用户当场说过很怪。 */
+/* 利率卡数值区(2026-09-30 第 45 改: 主体显示 LPR / 基准利率, 下面**两行**)。
+   第一行 1Y/10Y/30Y 国债收益率, 第二行 加/持/降 决议概率 —— 行内是「小标签 + 数值」(.mg-cv)。
+   ⛔ 别加"国债收益率 / 决议概率"那种表头: 用户 2026-09-30 明确说"我看得出来", 多一行纯噪声;
+   ⛔ 也别改回两列 —— 用户同一天先写"两列"、看到成品后当场纠正成"两行"。 */
+.mg-main{display:flex;align-items:baseline;gap:5px;line-height:1.2;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mg-main b{font-size:18px;font-weight:700;color:var(--os-text)}
+.mg-main-cap{font-size:10px;color:var(--os-muted)}
+.mg-main-u{font-size:12px;font-weight:400;color:var(--os-muted)}
+.mg-rows{display:flex;flex-direction:column;gap:1px;margin-top:2px}
+.mg-row{display:flex;align-items:baseline;gap:9px;line-height:1.4;white-space:nowrap}
+.mg-cv{display:flex;align-items:baseline;gap:4px;font-size:11px;font-variant-numeric:tabular-nums}
+.mg-cv i{font-style:normal;color:var(--os-muted);font-size:10px}
+.mg-cv b{font-weight:600;color:var(--os-text)}
+.mg-x{margin-left:auto;font-size:10px;line-height:1;color:var(--accent);text-decoration:none}
+.mg-x:hover{text-decoration:underline}
+/* 名行尾那颗错配灯(.mm-dot 的 margin-left:auto 在非 flex 的 .mg-name 里等于 0) → 补齐与文字的间距 */
+.mg-name .mm-dot{margin-left:6px;vertical-align:1px}
+/* 副行里的外链(目前只有 Polymarket 决议概率): 保持副行的紧凑字号, 只把颜色交给强调色, 悬停才出下划线 */
+.mg-sub a{color:var(--accent);font-weight:600;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mg-sub a:hover{text-decoration:underline}
+/* 交叉校验告警: 腾讯对照新浪发现显著偏差 → 卡片琥珀描边 + 角标 */
+.mg-tile-verr{border-color:var(--warn);box-shadow:0 0 0 1px var(--warn) inset}
+.mg-name .mg-verr{color:var(--warn);font-size:10px;font-weight:700;margin-left:5px;border:1px solid var(--warn);border-radius:var(--r-tag);padding:0 3px;cursor:help;vertical-align:1px}
+html.theme-light .mg-tile{background:#f6f7fb}
+html.theme-light .mg-pct.up{background:var(--up)}
+html.theme-light .mg-pct.down{background:var(--down)}
+
+/* 宏观 · TACO 概率(统一风格, 类驱动; 压力色内联在 JS) */
+/* 两个数据列都是固定宽 + 强制单行(2026-09-30 修): 标签列原本 64px, 而 Polymarket
+   在 12px 下实测 64.16px —— 差 0.16px 就折成两行, 于是这一行高 34px、其余行 17px。
+   列宽必须固定(6 根条的起点要对齐), 不能跟着文字伸缩, 所以加宽到 72px + nowrap。 */
+.taco-top{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap}
+.taco-num{font-size:30px;font-weight:500;line-height:1;font-variant-numeric:tabular-nums}
+.taco-pct{font-size:14px}
+.taco-meta{padding-bottom:2px}
+.taco-band{font-size:15px;font-weight:700}
+.taco-rows{margin-top:10px}
+.taco-drow{display:flex;align-items:center;gap:8px;margin-top:5px}
+.taco-dlabel{width:72px;flex:none;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.taco-dbar{flex:1;height:6px;border-radius:var(--r-tag);background:var(--os-border);overflow:hidden}
+.taco-dbar i{display:block;height:100%}
+.taco-dval{width:136px;flex:none;text-align:right;font-size:12px;color:var(--os-muted);white-space:nowrap}
+
+/* 宏观 · 日K线模式(商品/股指统一切换) */
+.mg-kgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.mg-kcard{background:var(--os-surface-2);border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.mg-kname{font-size:12px;font-weight:700;color:var(--os-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.mg-kcv{height:220px;position:relative}
+html.theme-light .mg-kcard{background:#f6f7fb}
+
+/* 宏观 · 实时↔日K 顶栏切换按钮(激活态) */
+#btnMacroK.active{border-color:var(--accent);color:var(--accent-ink);background:var(--accent)}
+
+/* ===== 模块2 · 大V宏观观点(一凌/药神/松哥抓波段/李大霄, 2026-09-21 建, 09-22 扩到 4 人 + 抽屉式) ===== */
+/* 4 张卡固定 2×2, 窄屏(≤980px)落回 1 列。**每张卡是一层抽屉**:
+     收起 = 「▸ 名字 · 机构 …… 最新日期」+ 一句总览(最多 2 行);
+     点标题行 → 主体用 grid-template-rows 0fr→1fr 平滑滑出(要点 / 原文 / 来源)。
+   展开态由 JS 的 VV_OPEN 记住(不是 <details> 的 open), 所以轮询重排、切页回来都不会塌。
+   2026-09-22 用户要求"压缩控制一下占的面积" → "弄成抽屉式的吧, 点击展开的感觉"。 */
+.vv-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;align-items:start}
+@media (max-width:980px){.vv-grid{grid-template-columns:minmax(0,1fr)}}
+.vv-card{background:var(--os-surface);border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:9px 11px;display:flex;flex-direction:column;gap:0;min-width:0;transition:border-color .16s ease,box-shadow .16s ease}
+.vv-card.vv-open{border-color:var(--accent);box-shadow:0 0 0 1px rgba(var(--accent-rgb),.22)}
+html.theme-light .vv-card{background:#fff}
+
+/* 宏观错配信号(2026-09-23 建; 2026-09-27 第十六改**统一色语义**) —— 全站一套:
+   **红=好/偏多(涨), 绿=坏/偏空(跌)**, A 股口径, 与模块1 的「加仓红 / 减仓绿」同源。
+   ⇒ 这里 顺风=红(--up) / 方向矛盾=绿(--down) / 中性或缺位=黄(--warn)。
+   ⛔ 与 2026-09-23 当时**正好相反** —— 那套"红绿灯"语义(绿=安全通行)已废弃: 同一个"红"在模块1
+      表示加仓、在这里却表示报警, 用户 09-27 明确点出这是矛盾("不然永远有矛盾")。
+   灯本体 = 源行情卡名行尾的 .mm-dot(见下面 .mg-mm); 报**逆风**的卡整卡走 .mm-alarm 的呼吸闪。 */
+.mm-dot{margin-left:auto;font-size:12px;line-height:1}
+.mm-dot.mm-ok{color:var(--up)}
+.mm-dot.mm-bad{color:var(--down)}
+.mm-dot.mm-mid{color:var(--warn)}
+
+/* ---------- 宏观错配 2026-09-23 改版: 灯挂到源行情卡上 ----------
+   (同日用户又删掉了那块独立的「宏观错配仪表」→ 原来的 .mm-bar/.mm-bar-ok/.mm-chip
+    「报警条」随之作废, 已一并删除; 报逆风的入口只剩"点卡片"。) */
+/* 报逆风的卡片呼吸式闪**绿**框(用户 09-23 原话「哪个报红灯的, 让原来的框像现在这样闪灯」——
+   词与颜色都在第十六改里随"红=好/绿=坏"改过了, 动作没变)。
+   行情卡(.mg-tile)与日K卡(.mg-kcard)共用这套 —— 两者都有 border-color/box-shadow 可吃。
+   ⚠️ 属于动画, 必须进文件末段 prefers-reduced-motion 的关闭名单。 */
+.mm-alarm{cursor:pointer;position:relative}
+.mm-alarm:hover{background:color-mix(in srgb,var(--down) 8%,transparent)}
+.mm-alarm:focus-visible{outline:2px solid var(--down);outline-offset:2px}
+/* 2026-10-01 性能: 呼吸闪从"直接动卡片自己的 border-color + box-shadow"改成"盖一层伪元素、只动它的 opacity"。
+   原来那两个属性都不可合成, 每帧要把整张卡(含 11px 模糊投影)重画一遍 —— 一屏挂几张就是持续的掉帧。
+   opacity 走合成层, 形状/颜色一次算好不再变; 观感(呼吸的深浅与 1.7s 节奏)保持一致。 */
+.mm-alarm::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  border:1px solid var(--down);
+  box-shadow:0 0 0 1px var(--down) inset,0 0 11px -2px color-mix(in srgb,var(--down) 60%,transparent);
+  opacity:.45;animation:mmAlarm 1.7s ease-in-out infinite}
+@keyframes mmAlarm{0%,100%{opacity:.45}50%{opacity:1}}
+/* 卡片名行里的「⚠ 错配」小标(与 .mg-verr 同一量级, 不抢名字) */
+.mg-mm{flex:none;font-size:10px;line-height:1.5;padding:0 4px;border-radius:var(--r-tag);font-weight:700;
+       color:var(--down);background:color-mix(in srgb,var(--down) 14%,transparent)}
+/* ============ 报警详情弹窗(openMmAlarm 填内容) · 2026-09-28 重排 ============
+   改之前是什么样: 一张 7 行 key-value 流水账(12px, 同字号同色), 「判定阈值 / 更新频率 / 数据来源」
+   这些**凭证**跟「当前读数」抢同一层注意力; 而结论那句 .mm-mo-sum 在下面「矛盾时」里又**原样抄了
+   一遍**。实测碳酸锂(li_px)那条: 弹窗 598px 高, 62% 是解释、只有 7% 是结论 —— 一屏读完什么都没记住。
+   现在按**一张票券**来排, 从"什么都说了"变成"先给结论, 凭证请自己展开":
+     ① 结论票 .mm-mo-ticket: 左侧一条状态色 + 状态药丸 + 一排读数格
+        (哪个格点亮了判定线, 就给谁机构色底 —— 这就是"主判据是哪个数"的唯一提示)
+     ② 暴露 .mm-mo-exp: 「这条管着你 11.2% 的股票市值」—— 决定这条报警值不值得动手的**唯一**数字,
+        全弹窗只有它被放大到 26px 并吃机构色(其余数字一律 --os-text)。
+     ③ 约束 .mm-mo-do: 冻结 / 预警 一句话(后端 mode_txt, 原来弹窗里根本没显示)
+     ④ 为什么 .mm-mo-sum 只留一份
+     ⑤ 机制对照只留**与结论不同的那一边**(顺风时 / 矛盾时 二选一), 不再重抄
+     ⑥ 凭证(判定阈值 / 本次判据 / 频率 / 来源)收进 <details>.mm-mo-proof, 默认收起
+     ⑦ 免责一句
+   数字全部走 --font-num —— 与首页「读数终端」同一口径。 */
+.mm-mo-ticket{border:1px solid var(--os-border);border-left:3px solid var(--os-muted);border-radius:var(--r-ctl);
+  background:var(--os-surface-2);padding:11px 13px 12px;margin-bottom:12px}
+.mm-mo-ticket.mm-bad{border-left-color:var(--down)}
+.mm-mo-ticket.mm-ok{border-left-color:var(--up)}
+.mm-mo-ticket.mm-mid{border-left-color:var(--warn)}
+.mm-mo-verdict{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.mm-mo-pill{font-size:12px;font-weight:800;line-height:1.6;padding:1px 9px;border-radius:var(--r-pill);white-space:nowrap}
+.mm-mo-pill.mm-bad{background:var(--down);color:var(--on-down)}
+.mm-mo-pill.mm-ok{background:var(--up);color:var(--on-up)}
+.mm-mo-pill.mm-mid{background:var(--warn);color:var(--on-warn)}
+.mm-mo-word{font-size:13px;color:var(--os-muted)}
+/* 读数格: 一格一个数(读数 / 近D日累计 / 单日), 不用表格线, 靠"谁带底"表达谁点亮了 */
+.mm-mo-reads{display:flex;align-items:flex-start;gap:3px;flex-wrap:wrap}
+.mm-mo-read{flex:1 1 0;min-width:104px;padding:4px 9px 5px;border-radius:var(--r-ctl)}
+.mm-mo-read .k{display:block;font-size:11px;color:var(--os-muted);margin-bottom:1px;white-space:nowrap}
+.mm-mo-read .v{display:block;font-family:var(--font-num);font-size:18px;font-weight:700;
+  color:var(--os-text);line-height:1.25;white-space:nowrap}
+.mm-mo-read .v i{font-style:normal;font-size:11px;font-weight:500;color:var(--os-muted);margin-left:3px}
+.mm-mo-read.on{background:color-mix(in srgb,var(--accent) 11%,transparent)}
+.mm-mo-read.on .k{color:var(--accent);font-weight:700}
+/* 暴露: 全弹窗唯一被放大的数字 */
+.mm-mo-exp{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 7px;padding-bottom:11px;
+  border-bottom:1px dashed var(--os-border);margin-bottom:11px}
+.mm-mo-exp .n{font-family:var(--font-num);font-size:24px;font-weight:800;color:var(--accent);line-height:1.05}
+.mm-mo-exp .u{font-family:var(--font-num);font-size:13px;font-weight:700;color:var(--accent)}
+.mm-mo-exp .lbl{font-size:13px;color:var(--os-text)}
+.mm-mo-exp .who,.mm-mo-exp .cap{flex-basis:100%;font-size:12px;line-height:1.6;color:var(--os-muted)}
+.mm-mo-exp .cap.over{color:var(--down);font-weight:700}
+/* 约束: 冻结 / 预警(后端 mode_txt)。顺风时不出现 —— 那句与结论票重复 */
+.mm-mo-do{font-size:13px;font-weight:700;line-height:1.6;margin-bottom:11px}
+.mm-mo-do.mm-bad{color:var(--down)}
+.mm-mo-do.mm-mid{color:var(--warn)}
+.mm-mo-sum{font-size:13px;line-height:1.8;margin:0 0 12px;color:var(--os-text)}
+.mm-mo-pair{display:flex;flex-direction:column;gap:7px;margin-bottom:12px}
+.mm-mo-p{font-size:12px;line-height:1.7;padding:7px 10px;border-radius:var(--r-ctl);border:1px solid var(--os-border);
+  color:var(--os-muted)}
+.mm-mo-p b{display:block;font-size:11px;color:var(--os-muted);margin-bottom:2px}
+.mm-mo-p.mm-bad{border-color:color-mix(in srgb,var(--down) 45%,transparent)}
+.mm-mo-p.mm-ok{border-color:color-mix(in srgb,var(--up) 45%,transparent)}
+/* 凭证: 默认收起 —— 判定阈值/频率/来源是"凭什么", 不是结论 */
+.mm-mo-proof{border-top:1px solid var(--os-border);padding-top:9px}
+.mm-mo-proof>summary{font-size:12px;font-weight:700;color:var(--os-muted);cursor:pointer;
+  list-style:none;display:flex;align-items:center;gap:5px;user-select:none}
+.mm-mo-proof>summary::-webkit-details-marker{display:none}
+.mm-mo-proof>summary::before{content:"▸";font-size:10px}
+.mm-mo-proof[open]>summary::before{content:"▾"}
+.mm-mo-proof>summary:hover{color:var(--os-text)}
+.mm-mo-tb{width:100%;border-collapse:collapse;font-size:12px;line-height:1.75;margin-top:8px}
+.mm-mo-tb th{width:66px;text-align:left;font-weight:400;color:var(--os-muted);padding:5px 8px 5px 0;
+  vertical-align:top;white-space:nowrap}
+.mm-mo-tb td{padding:5px 0;color:var(--os-text);border-top:1px solid var(--os-border);word-break:break-word}
+.mm-mo-tb tr:first-child td{border-top:none}
+.mm-mo-foot{font-size:11px;line-height:1.7;color:var(--os-muted);margin-top:11px}
+/* 弹窗宽度从 620 收到 580: 12.5px 正文一行的中文数 从 ~72 字收到 ~48 字(可读行长之内)。
+   宽度写在这里而不是 HTML 的 style="" —— 值不值得 620 是设计决定, 该和它周围的样式住一起 */
+#mmAlarmModal .qmodal{width:580px}
+/* ---------- 赌博指数 · 体检全文(2026-10-01) ---------- */
+/* 宽度 660: 一行"维度名 + 进度条 + 分数"再挂一行原始数字; 比 mmAlarm 宽一点, 因为要摊十行 */
+#gambleModal .gmb-modal{width:660px}
+.gmb-list{display:flex;flex-direction:column;gap:6px;margin:12px 0}
+.gmb-row{display:grid;grid-template-columns:104px minmax(0,1fr) 60px;gap:3px 10px;align-items:center;
+  grid-template-areas:"nm bar val" "raw raw raw";
+  padding:7px 9px;border:1px solid var(--os-border);border-radius:var(--r-ctl);background:var(--os-surface-2)}
+.gmb-row.na{opacity:.66}
+.gmb-row.gmb-open{border-color:var(--accent)}
+.gmb-nm{grid-area:nm;font-size:12px;font-weight:700;color:var(--os-text);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.gmb-bar{grid-area:bar;height:6px;border-radius:999px;background:var(--os-border);overflow:hidden}
+.gmb-bar > i{display:block;height:100%;border-radius:999px;background:var(--os-muted)}
+.gmb-bar.gmb-warn > i{background:var(--warn)}
+.gmb-bar.gmb-down > i{background:var(--down)}
+.gmb-val{grid-area:val;font-family:var(--font-num);font-size:13px;font-weight:800;text-align:right;
+  color:var(--os-text);white-space:nowrap}
+/* 分数那一格是**按钮**(2026-10-01 用户口径: 说明默认收起, 点它才展开)。
+   重置掉按钮的默认外观, 让它看起来还是那个分数, 只是多了个三角和鼠标手势。 */
+button.gmb-val{background:none;border:0;padding:0;font:inherit;font-family:var(--font-num);
+  font-size:13px;font-weight:800;text-align:right;color:var(--os-text);white-space:nowrap;
+  cursor:pointer;display:flex;align-items:center;justify-content:flex-end;gap:3px;width:100%}
+button.gmb-val:hover{text-decoration:underline;text-underline-offset:2px}
+button.gmb-val:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-radius:3px}
+.gmb-caret{font-size:9px;font-style:normal;opacity:.7;transition:transform .14s ease}
+.gmb-row.gmb-open .gmb-caret{transform:rotate(90deg)}
+.gmb-thin{font-size:10px;font-weight:700;opacity:.75;margin-left:1px}
+.gmb-val.gmb-warn{color:var(--warn)}.gmb-val.gmb-down{color:var(--down)}
+.gmb-val.na{font-family:inherit;font-size:11px;font-weight:600;color:var(--os-muted)}
+.gmb-raw{grid-area:raw;font-size:11px;line-height:1.7;color:var(--os-muted);word-break:break-word;
+  border-top:1px dashed var(--os-border);margin-top:5px;padding-top:5px}
+.gmb-raw[hidden]{display:none}
+.gmb-raw b{color:var(--os-text);font-weight:700}
+.gmb-raw .gmb-k{color:var(--accent);font-weight:700}
+.gmb-nestbox{grid-area:nest}
+.gmb-nest{margin-top:3px}
+.gmb-nest > summary{font-size:11px;font-weight:600;color:var(--os-muted);cursor:pointer;list-style:none}
+.gmb-nest > summary::-webkit-details-marker{display:none}
+.gmb-nest > summary::before{content:"▸ ";font-size:9px}
+.gmb-nest[open] > summary::before{content:"▾ "}
+.gmb-nest > summary:hover{color:var(--os-text)}
+/* AI 复核那一块(2026-10-01): 与黄金股/组合对冲用的是同一种"运行锁+落盘+轮询"交互, 这里只是收个样式。
+   它**只是旁注** —— 模型改不了任何分数, 所以视觉上压得比逐条明细轻(左边一条细竖线)。 */
+#gambleModal .gmb-ai{margin:12px 0 0;padding:10px 12px;border:1px solid var(--os-border);
+  border-left:3px solid var(--accent);border-radius:var(--r-ctl);background:var(--os-surface-2)}
+.gmb-ai-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gmb-ai-h > .btn{margin-left:auto}
+.gmb-ai-pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
+.gmb-ai-pill.ok{color:var(--up);background:rgba(128,128,128,.14)}
+.gmb-ai-pill.warn{color:var(--warn);background:rgba(128,128,128,.14)}
+
+.vv-head{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;cursor:pointer;user-select:none;border-radius:var(--r-ctl);margin:-3px -5px;padding:3px 5px;transition:background .14s ease}
+.vv-head:hover{background:rgba(128,128,128,.11)}
+.vv-head:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.vv-caret{flex:none;width:10px;font-size:10px;line-height:1;color:var(--os-muted);transition:color .14s ease}
+.vv-open .vv-caret{color:var(--accent)}
+.vv-name{font-size:14px;font-weight:800;color:var(--os-text)}
+.vv-org{font-size:11px;color:var(--os-muted)}
+.vv-date{margin-left:auto;font-size:11px;color:var(--os-muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.vv-sum-row{display:flex;align-items:flex-start;gap:7px;margin-top:6px}
+.vv-badge{flex:none;margin-top:2px;font-size:10px;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:var(--r-tag);padding:0 4px;line-height:1.6;white-space:nowrap;cursor:help}
+.vv-badge-off{color:var(--warn);border-color:var(--warn)}
+.vv-sum{font-size:13px;font-weight:600;color:var(--os-text);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.vv-open .vv-sum{display:block;overflow:visible}
+/* 抽屉本体: 收起时整行压成 0 高(内容 overflow:hidden 裁掉), 展开滑到内容自然高度。
+   grid-template-rows 的 0fr→1fr 是唯一"不用量高度"也能过渡的写法(Edge/Chromium 107+ 都支持)。 */
+.vv-body{display:grid;grid-template-rows:0fr;transition:grid-template-rows .26s cubic-bezier(.22,.72,.28,1)}
+.vv-open .vv-body{grid-template-rows:1fr}
+.vv-body-in{overflow:hidden;min-height:0;display:flex;flex-direction:column;gap:6px;padding-top:6px}
+.vv-pts{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+.vv-pts li{font-size:12px;line-height:1.55;color:var(--os-text);padding-left:10px;position:relative}
+.vv-pts li::before{content:"";position:absolute;left:0;top:6px;width:4px;height:4px;border-radius:50%;background:var(--accent);opacity:.7}
+.vv-lab{display:inline-block;margin-right:5px;font-size:11px;font-weight:700;color:var(--accent);background:rgba(var(--accent-rgb),.13);border-radius:var(--r-tag);padding:0 5px;white-space:nowrap}
+.vv-src{border-top:1px dashed var(--os-border);padding-top:5px}
+.vv-src>summary{font-size:11px;color:var(--os-muted);cursor:pointer;list-style:none;user-select:none}
+.vv-src>summary::-webkit-details-marker{display:none}
+.vv-src>summary::before{content:"▸ ";color:var(--os-muted)}
+.vv-src[open]>summary::before{content:"▾ "}
+.vv-link{display:block;font-size:11px;line-height:1.6;color:var(--accent);text-decoration:none;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vv-link:hover{text-decoration:underline}
+.vv-q{font-size:11px;line-height:1.6;color:var(--os-muted);margin-top:5px;padding-left:8px;border-left:2px solid var(--os-border)}
+.vv-qd{color:var(--os-muted);opacity:.72;margin-right:6px;font-variant-numeric:tabular-nums}
+.vv-foot{font-size:10px;color:var(--os-muted);border-top:1px solid var(--os-border);padding-top:5px;line-height:1.5}
+.vv-err{font-size:12px;color:var(--warn);line-height:1.55}
+.vv-broken .vv-head{cursor:default}
+
+/* ===== 估值温度(六亿居士61口径): 双仪表盘 + 色块胶囊列表 ===== */
+/* 卡宽贴内容: 仪表盘+列表紧凑排布, 胶囊紧跟名称不撑两端(2026-09-16 用户调整) */
+.val-wrap{display:flex;gap:36px;flex-wrap:wrap;align-items:stretch;justify-content:flex-start}
+.val-gauges{flex:0 0 400px;display:flex;flex-direction:column;justify-content:space-evenly;gap:8px}
+.val-gauges .vg-row{display:flex;gap:12px;justify-content:space-evenly}
+.vg{width:186px;text-align:center;cursor:help}
+.vg svg{width:100%;display:block}
+.vg-tick{font-size:10px;fill:var(--os-muted);text-anchor:middle}
+.vg-needle{stroke:var(--os-text);stroke-width:3.5;stroke-linecap:round}
+.vg-pivot{fill:var(--os-text)}
+.vg-num{font-size:30px;font-weight:800;line-height:1.15;font-variant-numeric:tabular-nums}
+.vg-label{font-size:12px;color:var(--os-muted)}
+.val-verdict{font-size:13px;color:var(--os-muted);text-align:center}
+.val-verdict b.down{color:var(--down)}
+.val-verdict b.up{color:var(--up)}
+/* 部分数据源未返回时的显性提示(2026-09-16): 独占一行, 别影响上面两栏的排布 */
+.val-miss{flex:1 1 100%;font-size:12px;color:var(--warn);margin-top:2px}
+.val-list{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;justify-content:space-evenly;gap:9px}
+.val-row{display:flex;align-items:center;gap:14px;cursor:help}
+/* 名称定宽 → 胶囊左缘对齐成一列(2026-09-16 用户调整) */
+.val-name{flex:0 0 84px;font-size:13px;color:var(--os-muted);white-space:nowrap}
+.val-pill{flex:0 0 108px;width:108px;text-align:center;border-radius:var(--r-ctl);padding:4px 0;font-size:13px;font-weight:800;color:#0b1220;font-variant-numeric:tabular-nums;white-space:nowrap}
+@media (max-width:768px){ .val-gauges{flex:1 1 100%} .val-list{max-width:none} }
+
+/* ===== 投资面板 · 对冲卡右上角 AI整理入口(星标, 卡片框角上, 2026-09-16 用户定稿) ===== */
+.ai-sum-host{position:relative}
+.ai-sum-btn{position:absolute;top:10px;right:14px;z-index:5;width:36px;height:36px;border-radius:var(--r-full);
+  border:1px solid var(--os-border);background:var(--os-surface);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  box-shadow:var(--shadow-pop);transition:transform .18s,border-color .18s,box-shadow .18s}
+.ai-sum-btn:hover{transform:translateY(-1px);border-color:var(--accent);box-shadow:0 4px 14px rgba(var(--accent-rgb),.35)}
+.ai-sum-btn svg{width:22px;height:22px}
+.ai-sum-stamp{font-size:11px;font-weight:400;color:var(--os-muted);margin-left:10px;white-space:nowrap}
+/* 右下角: AI分析 · 系统整体风险(感叹号) —— 它是**入口**不是"状态", 所以用强调色 accent,
+   不借 红/绿 那套好坏语言(2026-09-27 第二十二改) */
+.ai-risk-btn{position:absolute;bottom:10px;right:14px;z-index:5;width:36px;height:36px;border-radius:var(--r-full);
+  border:1px solid var(--os-border);background:var(--os-surface);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  box-shadow:var(--shadow-pop);transition:transform .18s,border-color .18s,box-shadow .18s}
+.ai-risk-btn:hover{transform:translateY(-1px);border-color:var(--accent);box-shadow:0 4px 14px color-mix(in srgb,var(--accent) 35%,transparent)}
+.ai-risk-btn.busy{opacity:.55;pointer-events:none}
+.ai-risk-btn svg{width:22px;height:22px}
+/* 系统整体风险排序表 */
+.ai-risk-table{font-size:13px;width:100%}
+.ai-risk-table thead th{font-size:11px;letter-spacing:.05em;color:var(--os-muted);font-weight:700;border-bottom:1px solid var(--os-border);padding:8px 10px;text-align:left;white-space:nowrap}
+.ai-risk-table td{vertical-align:top;padding:10px;line-height:1.62;border-bottom:1px solid var(--bd,rgba(148,163,184,.14))}
+.ai-risk-table tr:last-child td{border-bottom:none}
+.ai-risk-table .sr-n{width:34px;text-align:center;font-weight:800;color:var(--os-muted);font-variant-numeric:tabular-nums}
+.ai-risk-table .sr-risk{font-weight:700;width:19%;min-width:110px}
+.ai-risk-table .sr-watch{width:32%}
+/* AI 复核加权标注(对冲率行右侧小字, 2026-09-16): 自动复核每天首开跑一次, 只标幅度不占位 */
+.hp-row .hp-adj{font-style:normal;font-size:11px;font-weight:700;color:var(--warn);margin-left:6px;vertical-align:2px;cursor:help}
+.hp-row .hp-adj::before{content:"· ";color:var(--os-muted)}
+
+/* ===== 组合风险对冲(压缩为饼图左侧窄栏) ===== */
+.risk-empty{color:var(--os-muted);font-size:13px;padding:6px 0}
+/* 判定大徽标(窄栏顶部) */
+.risk-verdict{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;min-width:96px;padding:12px 16px;border-radius:var(--r-ctl);border:1px solid var(--os-border);background:var(--os-surface-2)}
+.risk-verdict .rv-big{font-size:30px;font-weight:800;line-height:1.2}
+.risk-verdict .rv-cap{font-size:14px;color:var(--os-muted);white-space:nowrap}
+.risk-verdict.v-good{color:var(--up)}            /* 好=红(轴①) */
+.risk-verdict.v-mid{color:var(--warn)}            /* 中=琥珀 */
+.risk-verdict.v-poor{color:var(--down)}           /* 差=绿(轴①) */
+html.theme-light .risk-verdict{background:#f6f7fb}
+/* 对冲窄栏: 饼图左侧, 饼图直径由 donut-wrap 高度锁定不受此栏影响 ⇒ 2026-09-29 随中间行一起放大时
+   这一栏加宽(252→288)是"免费"的: 886px 的 wrap 里 288+38+503 仍留 57px 富余, 不会挤到饼图。 */
+.hedge-panel{flex:0 0 288px;align-self:stretch;display:flex;flex-direction:column;justify-content:center;gap:18px;min-height:0;overflow-y:auto}
+.hp-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.hp-row .hp-k{font-size:15px;color:var(--os-muted);white-space:nowrap}
+.hp-row .hp-v{font-size:30px;font-weight:800;color:var(--os-text);font-variant-numeric:tabular-nums;line-height:1.15;white-space:nowrap}
+.hp-row .hp-v small{font-size:13px;font-weight:600;color:var(--os-muted);margin-left:1px}
+.hp-row .hp-lb{color:var(--up)}        /* 理论下界 = 最理想 → 红(轴①) */
+.hp-row .hp-act{color:var(--warn)}
+.hp-row .hp-ub{color:var(--down)}      /* 零对冲上界 = 最差 → 绿(轴①) */
+.hp-warn{font-size:10px;color:var(--warn);line-height:1.45}
+/* 调仓建议条: 减高边际贡献 + 增低特质相关 */
+.rm-suggest{border:1px dashed var(--os-border);border-radius:var(--r-ctl);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.rs-line{display:flex;align-items:flex-start;gap:7px;font-size:13px;color:var(--os-muted);line-height:1.55}
+.rs-tag{flex:0 0 auto;font-size:12px;font-weight:700;border-radius:var(--r-tag);padding:1px 7px;line-height:1.5}
+/* ⚠️ 方向色按 A 股口径: 红=加仓、绿=减仓(--up 是红、--down 是绿, 见文件头)。
+   这两行原来正好写反(减=红/增=绿), 是用户第二次指出同类错了(第一次是「框架」页成员描边)。 */
+.rs-cut{background:color-mix(in srgb,var(--down) 14%,transparent);color:var(--on-tint-down)}
+.rs-add{background:color-mix(in srgb,var(--up) 14%,transparent);color:var(--on-tint-up)}
+
+/* LOF 双击详情(模块4·套利): 行情摘要 + 基金主要持仓 */
+.arbD-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.arbD-summary .dt-item{padding:8px 10px}
+.arbD-summary .dt-v{font-size:15px}
+.arbD-summary .ds-prem{font-weight:800;font-variant-numeric:tabular-nums}
+.arbD-summary .ds-prem.up{color:var(--up)} .arbD-summary .ds-prem.down{color:var(--down)}
+.arbD-table{width:100%;border-collapse:collapse;font-size:12px}
+.arbD-table th{color:var(--os-muted);font-weight:600;text-align:right;padding:5px 8px;border-bottom:1px solid var(--os-border);font-size:11px;white-space:nowrap}
+.arbD-table th:first-child,.arbD-table td:first-child{text-align:center}
+.arbD-table th:nth-child(2),.arbD-table td:nth-child(2){text-align:left}
+.arbD-table td{padding:6px 8px;border-bottom:1px solid var(--os-border);font-variant-numeric:tabular-nums;white-space:nowrap}
+.arbD-table td:first-child{color:var(--os-muted)}
+.arbD-table .hd-wbar{display:inline-block;height:8px;border-radius:var(--r-tag);min-width:2px;vertical-align:middle;background:var(--accent);opacity:.75}
+.arbD-empty{font-size:12px;color:var(--os-muted);padding:10px 2px;line-height:1.5}
+
+/* 模块7 持仓操作建议: 三维打分 + 关键节点待判 */
+/* 持仓表头排序按钮(2026-09-17): 文字+小箭头, 点击 高→低 / 低→高 / 恢复默认 三态 */
+.th-sort{all:unset;display:inline-flex;align-items:center;gap:3px;cursor:pointer;font:inherit;color:inherit}
+.th-sort:hover{color:var(--accent)}
+.th-sort .ts-ar{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;opacity:0}
+.th-sort.asc .ts-ar{border-bottom:5px solid currentColor;opacity:.9}
+.th-sort.desc .ts-ar{border-top:5px solid currentColor;opacity:.9}
+.th-sort.on{color:var(--accent);font-weight:700}
+/* all:unset 会把默认焦点环一起清掉 → 键盘 Tab 到表头排序按钮时完全看不出焦点在哪(B2 2026-09-20 补回) */
+.th-sort:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-tag)}
+/* 可双击打开详情的行: 补鼠标手型 + 键盘焦点环(配合 app.js openableRow) */
+.row-open{cursor:pointer}
+.row-open:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:var(--r-ctl)}
+/* 口径弹窗(2026-09-17 改版): 分区卡片 + 子权重胶囊 + 固定底栏 */
+.acfg-modal{width:820px}
+/* 宽度要写 id 才有胜算: .qmodal{width:640px} 在本文件里更靠后, 同为单类选择器时后者赢 */
+#advCfgModal .qmodal{width:820px}
+.acfg-body{display:flex;flex-direction:column;gap:14px}
+/* ⚠️ .acfg-sec / .acfg-sec-title / .acfg-hint 已删(2026-09-20 统一): 模块1 的分区改用模块5 那套
+   .q-form/.q-fgroup 卡片 + .q-step 序号(样式见下面「两个「参数」弹窗共用同一套卡片」一节),
+   同一份分区样式只留一处, 免得两边又慢慢长歪。 */
+/* ⚠️ 2026-09-29 美化清理: .acfg-auto / .acfg-dim / .acfg-main / .acfg-main-txt / .acfg-sub / .acfg-subs
+   / .acfg-none 全部删掉。它们是 2026-09-26 “参数与规则合并、只读”之前那套
+   可编辑权重表单的桩子 —— 权重输入框、子权重胶囊、自动开关。
+   现在弹窗里只剩 .acfg-field / .acfg-note / .acfg-row(只读展示)，
+   这些选择器在实测 DOM 里匹配数一直是 0（含弹层全开后）。 */
+.acfg-note{margin-top:9px;font-size:11px;color:var(--os-muted);line-height:1.6}
+.acfg-field{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--os-text);cursor:default}
+.acfg-field input{width:64px;text-align:center}
+.acfg-field span{font-weight:600}
+.acfg-field em{font-style:normal;font-size:11px;color:var(--os-muted)}
+.acfg-foot{display:flex;align-items:center;gap:10px;padding:12px 18px;border-top:1px solid var(--os-border)}
+.acfg-foot-hint{font-size:11px;color:var(--os-muted);margin-right:auto}
+.adv-tag{display:inline-block;font-size:11px;font-weight:800;border-radius:var(--r-tag);padding:2px 7px;line-height:1.5;white-space:nowrap}
+.adv-tag.add{background:color-mix(in srgb,var(--up) 14%,transparent);color:var(--on-tint-up)}
+.adv-tag.cut{background:color-mix(in srgb,var(--down) 14%,transparent);color:var(--on-tint-down)}
+.adv-tag.hold{background:var(--os-surface-2);color:var(--os-muted)}
+.obs-tag{display:inline-block;font-size:11px;font-weight:700;border-radius:var(--r-tag);padding:1px 7px;background:rgba(var(--accent-rgb),.14);color:var(--accent);white-space:nowrap}
+/* 持仓/观察 视图切换按钮(替代原"持仓"标题, 2026-09-17) */
+.hv-toggle{all:unset;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-size:var(--fs-13);font-weight:600;color:var(--os-text);border:1px solid var(--os-border);border-radius:var(--r-pill);padding:4px 14px;line-height:1.5;background:var(--os-surface-2);white-space:nowrap;min-height:var(--ctl-s);box-sizing:border-box}
+.hv-toggle:hover{border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.hv-toggle.obs{color:var(--accent-on-tint);border-color:rgba(var(--accent-rgb),.45);background:rgba(var(--accent-rgb),.10)}
+/* 候选池视图(2026-09-23): 第三态, 用琥珀色与"观察"的蓝区分开 —— 一眼看出现在不是持仓/观察 */
+.hv-toggle.cand{color:var(--warn);border-color:rgba(245,158,11,.45);background:rgba(245,158,11,.10)}
+/* 候选池行: 「候选」标签 + 中性的分数徽章(没有买卖方向 → 不给红/绿) */
+.obs-tag.cand{background:rgba(245,158,11,.14);color:var(--on-tint-warn)}
+.adv-tag.cand{background:rgba(245,158,11,.14);color:var(--on-tint-warn)}
+.adv-rv.cand{color:var(--warn)}
+/* 候选视图「持仓」那一格的 <候选> 标签: 可单击 → 加入观察仓(2026-09-28 用户口径)。
+   只给悬停一点底色变化做"这里能点"的提示, 不加边框/不加图标(列窄, 不许撑宽)。 */
+.obs-tag.cand-act{cursor:pointer}
+.obs-tag.cand-act:hover{background:rgba(245,158,11,.30)}
+/* 候选池行「评分」列: 只留 标签+综合分, 四维与 AI 原值都在 tip 里(2026-09-24 用户"留这点尾巴干嘛") */
+
+/* 模块7 精简版: 建议只出结论(落在持仓表列里), 明细去「个股详情」页(2026-09-23 右侧弹窗已删) */
+#advCfg{margin:9px 10px 0}
+.adv-mini{width:1%;white-space:nowrap}
+.adv-mini .adv-tag{cursor:pointer}
+/* ❗ 建议列的子行**不准加横滑条**(2026-09-17 用户明确:
+   "不要加滑轮, 我希望的是没有滑轮")。该列只能靠**把表述写短**来放下 ——
+   现在是 `加N手 · 目标xx%`(不带 pp)。想加信息就进 title岛尼, 别加宽度/滚动。 */
+/* 表头「建议」里的 AI 复核入口(独立 AI 列已去掉) */
+th .adv-aibtn{font-size:10px;font-weight:700;line-height:1.4;padding:1px 6px;border-radius:var(--r-tag);
+  border:1px solid var(--os-border);background:transparent;color:var(--os-muted);cursor:pointer;
+  margin-left:5px;vertical-align:1px;white-space:nowrap;font-family:inherit}
+th .adv-aibtn:hover{border-color:var(--accent);color:var(--accent)}
+th .adv-aibtn:disabled{opacity:.55;cursor:default}
+th .adv-aibtn.busy{border-color:var(--accent);color:var(--accent);opacity:1}
+/* 结论上的 AI 评分标记: 「AI +1.8」= AI 五面评分把综合分抬高/压低多少(2026-09-16 口径, 不再是立场符号) */
+.adv-rv{display:inline-block;margin-left:3px;font-size:10px;font-weight:800;line-height:1.2;vertical-align:1px}
+/* 琥珀色文字全站走 var(--warn), 别再硬编 #f59e0b —— 日间那个值要换成深琥珀 #92400e,
+   写死的浅色压在白底上实测只有 1.8:1, 小号粗体基本看不出写了什么(2026-09-24 体检扫出 6 处)。 */
+.adv-rv.ok{color:var(--on-tint-up)} .adv-rv.warn{color:var(--on-tint-warn)} .adv-rv.bad{color:var(--on-tint-down)}
+.adv-rv.stale{opacity:.45}
+
+/* ===== 持仓行的行内操作(2026-09-24 用户口径) =====
+   ① 悬停 **停够 0.65s** → 行尾浮现红色 ✕; 只是扫过一行不会闪。
+      点击后: 持仓/观察行 = 移出并**转入候选池**(2026-09-28 用户口径, 原来这里是直接删除);
+              候选池行   = 移出候选池。两处同一个按钮(见 app.js 的 rowKillBtn)。
+   ② 「持仓」「成本/股」两格单击即原地变输入框(回车/失焦保存, Esc 取消)。
+   两件事都不新增列: 删除钮绝对定位在最后一格(.adv-mini)里 —— 列宽是 colgroup 定死的,
+   加第 9 列会把那 8 列的宽度全挤歪(而持仓/观察/候选三个视图共用这张表)。
+   颜色不用 var(--up): 那个变量在本项目里是"涨=红", 语义与"删除"无关, 这里直接写红。 */
+#holdingsBody td.adv-mini{position:relative}
+/* 「建议」那一格(2026-10-02 第二次改): 原来 chip 与净看空/宏观角标**在同一行 nowrap**,
+   合起来 137px ⇒ 这一列被撑到 27%(用户 1229 下 155px), 可大多数行只用到 90px
+   ⇒ 右边一大片空白, 用户「右边太多空白了…太丑太丑」。
+   现在: 角标挪出 chip(app.js) + 格子里允许换行 + 目标仓位那行单独占一行(它 91px, 正好把列填满)。
+   列宽 27.0% → 17.3%(155 → 99px), 让出来的 56px 全给了左边 7 列(名称列 70→86, 六字港股名也不截了)。
+   ⚠️ 代价: 同时挂两个角标的那一行会多占一行(chip+角标⇒91→ 该行 61→89px); 其它行行高不变。 */
+#holdingsBody td.adv-mini{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:4px;row-gap:0;
+  white-space:normal;width:auto}
+/* ⛔ 上面这条必须带 width:auto(2026-10-02 实测): 基础规则里的 .adv-mini{width:1%} 一旦被
+   display:flex 接手, 这格就不再是 table-cell(浏览器会另给它套一层匿名单元格), td 自己的
+   width:1% 就按那层匿名单元格(99px)解析成 ~1px ⇒ clientWidth 只剩 8px(左右各 4px 内边距),
+   所有行都被压成竖排、行高 61→99、每行都报「被挤」。width:auto 让它按匿名单元格撑满 99px。 */
+#holdingsBody td.adv-mini > .num-sub{flex:0 0 100%;margin-top:2px}
+#holdingsBody td.adv-mini .adv-tag{flex:0 0 auto}
+#holdingsBody td.adv-mini .mm-mark,#holdingsBody td.adv-mini .bear-net{margin-left:0}
+.hold-del{position:absolute;right:2px;top:50%;transform:translateY(-50%);
+  width:20px;height:20px;padding:0;border-radius:50%;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-family:inherit;font-size:12px;font-weight:700;line-height:1;
+  color:var(--up);background:color-mix(in srgb,var(--up) 14%,transparent);border:1px solid color-mix(in srgb,var(--up) 45%,transparent);
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity .16s ease,visibility .16s ease,background .15s ease,color .15s ease,transform .15s ease}
+/* transition-delay 只给 opacity/visibility(顺序与上面 transition 的前两项对齐):
+   背景/文字的 hover 变色必须**立刻**响应, 不然按下去半秒才变红, 像卡了。 */
+#holdingsBody tr:hover .hold-del{opacity:1;visibility:visible;pointer-events:auto;transition-delay:.65s,0s,0s,0s,0s}
+.hold-del:hover{background:var(--up);border-color:var(--up);color:var(--on-up);transform:translateY(-50%) scale(1.12)}
+/* 2026-09-28: 日间这条重复规则删了 —— 上面已全走 --up 令牌, 令牌按主题给值。 */
+/* 2026-09-28: 日间模式这条重复规则删掉了 —— --up / --on-up 已经按主题给好值, 不用再写一套。 */
+
+/* 「交易」钮(2026-10-01 用户口径): "在 ❌️ 的左边加多一个交易的按钮"。
+   位置 right:28px = ✕(宽 20 + right 2) 再留 6px; 浮现时机与 ✕ **共用**同一条规则(停 0.65s 才淡入),
+   所以两枚一起出现、一起消失, 不会一先一后。
+   颜色用 --accent(机构蓝): 红在本项目里是"涨 = 好", 而这枚是普通动作(既不是删除、也不是涨跌), 别混。
+   只挂在持仓/观察行 —— 候选池行不是持仓, 没有可交易的对象(见 app.js 的 rowTradeBtn)。 */
+.hold-trade{position:absolute;right:28px;top:50%;transform:translateY(-50%);
+  height:20px;padding:0 7px;border-radius:10px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-family:inherit;font-size:11px;font-weight:700;line-height:1;letter-spacing:.02em;white-space:nowrap;
+  color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity .16s ease,visibility .16s ease,background .15s ease,color .15s ease,transform .15s ease}
+#holdingsBody tr:hover .hold-trade{opacity:1;visibility:visible;pointer-events:auto;transition-delay:.65s,0s,0s,0s,0s}
+.hold-trade:hover{background:var(--accent);border-color:var(--accent);color:#fff;transform:translateY(-50%) scale(1.06)}
+
+/* ---- 交易弹窗(2026-10-01; 结构见 index.html 的 #tradeModal / 逻辑见 app.js 的 openTradeModal) ----
+   买卖两态的颜色沿用全站口径: 买入 = 红(--up, 与"加仓 = 红"一致) / 卖出 = 绿(--down, "减仓 = 绿")。 */
+.trade-sub{font-size:12px;line-height:1.7;color:var(--os-muted);margin-bottom:11px}
+.trade-sub .trade-code{color:var(--os-text);font-weight:700}
+.trade-dot{color:var(--os-muted);opacity:.75}
+.trade-seg{display:flex;gap:6px;margin-bottom:13px}
+.trade-seg button{flex:1;height:32px;border-radius:var(--r-ctl);cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;
+  color:var(--os-muted);background:var(--os-surface-2);border:1px solid var(--os-border);
+  transition:background .15s,color .15s,border-color .15s}
+.trade-seg button.on[data-side="buy"]{color:var(--on-up);background:var(--up);border-color:var(--up)}
+.trade-seg button.on[data-side="sell"]{color:var(--on-down);background:var(--down);border-color:var(--down)}
+.trade-form{display:grid;grid-template-columns:62px 1fr;gap:8px 10px;align-items:center}
+.trade-lb{font-size:12px;color:var(--os-muted)}
+.trade-in{display:flex;align-items:center;gap:6px;min-width:0}
+.trade-in input{flex:1;min-width:0;width:100%;height:30px;box-sizing:border-box;padding:0 9px;font-family:inherit;font-size:13px;
+  font-weight:600;text-align:right;font-variant-numeric:tabular-nums;color:var(--os-text);background:var(--os-bg);
+  border:1px solid var(--os-border);border-radius:var(--r-ctl);transition:border-color .15s}
+.trade-in input::placeholder{color:var(--os-muted);opacity:.6;font-weight:400}
+.trade-in input:focus{outline:none;border-color:var(--accent)}
+.trade-unit{flex:0 0 auto;font-size:11px;color:var(--os-muted)}
+.trade-quick{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:11px 0 2px}
+.trade-quick button{height:22px;padding:0 9px;border-radius:11px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;
+  color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 38%,transparent);transition:background .15s,color .15s}
+.trade-quick button:hover{background:var(--accent);color:#fff}
+.trade-lothint{font-size:11px;color:var(--os-muted)}
+.trade-cash{display:flex;align-items:center;gap:7px;margin:11px 0 0;font-size:12px;color:var(--os-muted);cursor:pointer}
+.trade-cash input{width:14px;height:14px;margin:0;accent-color:var(--accent);cursor:pointer}
+.trade-cash input:disabled{cursor:default}
+.trade-prev{margin-top:11px;padding:10px 12px;border-radius:var(--r-ctl);background:var(--os-surface-2);border:1px solid var(--os-border)}
+.trade-pv{display:flex;justify-content:space-between;gap:12px;font-size:12px;line-height:1.9;color:var(--os-muted)}
+.trade-pv b{color:var(--os-text);font-weight:700;font-variant-numeric:tabular-nums}
+.trade-pv b .up{color:var(--up)} .trade-pv b .down{color:var(--down)}
+.trade-hist{margin-top:14px;border-top:1px solid var(--os-border);padding-top:10px}
+.trade-hhead{display:flex;justify-content:space-between;gap:10px;font-size:11px;font-weight:700;color:var(--os-muted);margin-bottom:5px}
+.trade-hempty{font-size:12px;color:var(--os-muted)}
+.trade-hrow{display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0;color:var(--os-muted);font-variant-numeric:tabular-nums}
+.trade-hrow .side{flex:0 0 auto;width:16px;height:16px;line-height:16px;text-align:center;border-radius:var(--r-tag);font-size:10px;font-weight:800}
+.trade-hrow .side.buy{color:var(--on-up);background:var(--up)}
+.trade-hrow .side.sell{color:var(--on-down);background:var(--down)}
+.trade-hrow .q{color:var(--os-text);font-weight:600}
+.trade-hrow .d{flex:0 0 auto;opacity:.8}
+.trade-hrow .p{margin-left:8px;font-weight:700}
+.trade-hrow .p.up{color:var(--up)} .trade-hrow .p.down{color:var(--down)}
+.trade-hrow .trade-undo{margin-left:auto;flex:0 0 auto;height:20px;padding:0 8px;border-radius:10px;cursor:pointer;font-family:inherit;
+  font-size:11px;color:var(--os-muted);background:transparent;border:1px solid var(--os-border);transition:color .15s,border-color .15s}
+.trade-hrow .trade-undo:hover{color:var(--down);border-color:color-mix(in srgb,var(--down) 50%,transparent)}
+.trade-foot{display:flex;align-items:center;gap:8px;padding:12px 18px;border-top:1px solid var(--os-border)}
+.trade-warn{flex:1;min-width:0;font-size:12px;line-height:1.4;color:var(--warn)}
+
+/* 可单击编辑的两格: 光标变文本条 + 悬停浮一层极淡的底, 一眼看出"这里能改"(整行是 pointer, 得压掉) */
+#holdingsBody td.cell-editable{cursor:text}
+#holdingsBody td.cell-editable:hover{background:color-mix(in srgb,var(--accent) 9%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 26%,transparent)}
+#holdingsBody td.cell-editing{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+/* 输入框占满整格: 字号/字重/右对齐跟原来的数字一致, 因此"变输入框"时行高不跳 */
+.cell-edit{width:100%;box-sizing:border-box;display:block;
+  font-family:inherit;font-size:13px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;
+  color:var(--os-text);background:var(--os-surface);border:1px solid var(--accent);border-radius:var(--r-ctl);
+  padding:2px 4px;outline:none}
+/* 「隐藏金额」的模糊(见 body.money-hidden .amt)会连输入框里的字一起糊掉 —— 编辑时放开:
+   用户既然点进来改成本, 就该看得见自己敲的数字。 */
+body.money-hidden td.cell-editing{filter:none;-webkit-filter:none}
+
+/* ===== 量化入门(模块5): 权益曲线 + 参数行 + 成交假设弹窗 ===== */
+/* flex 列: 图例条(定高) + 画布(吃剩余) —— 画布高度必须由父容器给出, Chart.js 才量得到 */
+.q-chartbox{position:relative;height:300px;display:flex;flex-direction:column;gap:6px;border:1px solid var(--os-border);border-radius:var(--r-ctl);background:var(--os-surface-2);padding:8px 12px 10px;margin-bottom:14px}
+.q-chart-canvas{position:relative;flex:1;min-height:0}
+.q-chart-canvas canvas{display:block;max-width:100%;max-height:100%}
+html.theme-light .q-chartbox{background:#f6f7fb}
+.q-chart-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--os-muted);font-size:13px;text-align:center;padding:0 24px}
+/* 口径勾选条(2026-09-18): 取代原表格首列 + Chart.js 自带图例 */
+.q-chart-legend{flex:none;display:flex;flex-wrap:wrap;gap:2px 12px;align-items:center;min-height:20px;font-size:12px}
+.q-leg{display:inline-flex;align-items:center;gap:5px;cursor:pointer;color:var(--os-muted);white-space:nowrap}
+.q-leg input{cursor:pointer;accent-color:var(--accent);flex:none;margin:0;width:13px;height:13px}
+.q-leg i{flex:none;width:11px;height:3px;border-radius:var(--r-tag);background:var(--os-muted)}
+.q-leg.on{color:var(--os-text);font-weight:600}
+.q-leg:not(.on) i{opacity:.32}
+.q-leg:hover{color:var(--accent)}
+/* 固定项(买入持有基准 / 上证指数, 2026-09-19): 恒画在图上, 不可勾选 → 色块不淡化、不响应 hover */
+.q-leg.q-fix{cursor:default}
+.q-leg.q-fix i{opacity:1}
+.q-leg.q-fix:hover{color:var(--os-muted)}
+.q-sep{flex:none;width:1px;height:12px;background:rgba(148,163,184,.35)}
+.q-form{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;margin-bottom:6px}
+.q-fgroup-title{font-size:11px;font-weight:700;color:var(--os-muted);margin-bottom:7px;display:flex;align-items:baseline;gap:8px}
+.q-wrow{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.q-wfield{display:flex;flex-direction:column;gap:3px}
+.q-wfield label{font-size:10px;color:var(--os-muted);order:2;text-align:center;cursor:default}
+.q-wfield input{width:72px;order:1;text-align:center}
+.q-wfield.q-wfield-sm input{width:64px}
+.q-wfield select{order:1;width:96px;font-size:12px}
+/* 2026-09-20 瘦身: 原 .q-sum / .q-sum.warn 全项目 0 命中, 删除 */
+/* ---------- 两个「参数」弹窗共用同一套卡片(2026-09-20 统一) ----------
+   模块5 原本就长这样: 每节一张浅色卡片 + 序号徽标, 纵向排列(4 个 .q-fgroup 靠 .q-form 的 22px gap
+   横排时, 权重/触发线/费率挤成一行, 看不出哪几个数属于哪一块)。模块1 的「评分参数」现在**复用同一
+   套选择器** —— 分区样式只留一处, 两边不会再慢慢长歪。
+   宽度仍是内容定的: 模块1 每行要摆 7 个"子权重"小框, 780px 会挤成两行, 所以那边留 820px。 */
+#qParamsModal .qmodal{width:780px}
+#qParamsModal .q-form,#advCfgModal .q-form{flex-direction:column;gap:12px;margin-bottom:0}
+#qParamsModal .q-fgroup,#advCfgModal .q-fgroup{width:100%;padding:11px 14px 13px;border:1px solid var(--os-border);border-radius:var(--r-ctl);
+  background:rgba(148,163,184,.055);display:flex;flex-direction:column;gap:9px}
+html.theme-light #qParamsModal .q-fgroup,html.theme-light #advCfgModal .q-fgroup{background:rgba(15,23,42,.022)}
+#qParamsModal .q-fgroup .q-fgroup-title,#advCfgModal .q-fgroup .q-fgroup-title{margin-bottom:0}
+#qParamsModal .q-fgroup .q-fgroup .q-fgroup-title{margin-top:4px}
+.q-step{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;
+  border-radius:var(--r-tag);background:rgba(var(--accent-rgb),.2);border:1px solid rgba(var(--accent-rgb),.45);color:var(--accent-on-tint);
+  font-size:10px;font-weight:800;line-height:1}
+html.theme-light .q-step{background:rgba(var(--accent-rgb),.14)}
+.q-wgrid{display:flex;gap:9px;flex-wrap:wrap;align-items:flex-start}
+.q-wfield[data-eff]::after{content:attr(data-eff);order:3;font-size:10px;line-height:1.35;text-align:center;
+  color:var(--os-muted)}
+/* 外部评价因子(AI; 2026-09-28 删掉 Skills 那一维): 换个描边色 + 下面挂"本样本有多少只有这一维的分" */
+.q-wfield-ext input{border-color:rgba(var(--accent-rgb),.45)}
+.q-wfield-ext label{color:var(--accent-on-tint)}
+.q-wcov{order:4;font-size:10px;line-height:1.35;text-align:center;color:var(--os-muted);white-space:nowrap}
+.q-whint{font-size:11px;line-height:1.6;color:var(--os-muted)}
+.q-whint.warn{color:var(--warn)}
+.q-fnote{font-size:11px;line-height:1.7;color:var(--os-muted);background:rgba(var(--accent-rgb),.07);
+  border-left:2px solid rgba(var(--accent-rgb),.45);border-radius:0 var(--r-ctl) var(--r-ctl) 0;padding:6px 10px}
+.q-fnote b{color:var(--os-text);font-weight:700}
+.q-wrow-sep{border-top:1px dashed var(--os-border);padding-top:9px}
+#quantTable td.num,#quantTable th.num{text-align:right}
+/* 成交假设弹窗 */
+.qmodal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1050;display:flex;align-items:center;justify-content:center;opacity:0;visibility:hidden;transition:.2s;padding:20px}
+.qmodal-backdrop.open{opacity:1;visibility:visible}
+.qmodal{width:640px;max-width:100%;max-height:80vh;display:flex;flex-direction:column;background:var(--os-surface);border:1px solid var(--os-border);border-radius:var(--r-ctl);box-shadow:0 24px 64px rgba(0,0,0,.5);transform:translateY(10px);opacity:0;transition:.22s cubic-bezier(.22,.61,.36,1)}
+.qmodal-backdrop.open .qmodal{transform:translateY(0);opacity:1}
+.qmodal-head{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--os-border);font-size:15px;font-weight:700}
+.qmodal-x{/* 三档规矩①: 只有图标 → 正圆, 尺寸跟 .btn-close 对齐(28x28) */
+  border:none;background:transparent;color:var(--os-muted);font-size:18px;line-height:1;cursor:pointer;
+  width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--r-full)}
+.qmodal-x:hover{color:var(--os-text);background:var(--os-surface-2)}
+.qmodal-body{flex:1;overflow-y:auto;padding:14px 18px}
+.qa-item{display:flex;gap:10px;align-items:flex-start;font-size:12px;color:var(--os-text);line-height:1.55;padding:7px 0;border-bottom:1px dashed var(--os-border)}
+.qa-item:last-child{border-bottom:none}
+.qa-item .qa-n{flex:0 0 auto;width:18px;height:18px;border-radius:50%;background:var(--os-surface-2);border:1px solid var(--os-border);color:var(--os-muted);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.qa-item b{color:var(--os-text);font-weight:800}
+/* 「规则」弹窗的硬规则正文是服务端常量文案(含 <b>), 占满剩余宽度并允许折行 */
+.qa-item>span:last-child{flex:1 1 auto;min-width:0}
+.qa-sub{font-size:11px;font-weight:700;color:var(--os-muted);margin:12px 0 2px}
+@media (max-width:768px){ .q-chartbox{height:220px} .qmodal{max-height:88vh} }
+/* 操作明细弹窗(双击回测行): 汇总行 + 紧凑明细表 */
+.qt-sum{padding:2px 0 10px;line-height:1.7}
+.qt-sum b{color:var(--os-text)}
+.qt-table th{font-size:11px;letter-spacing:.04em;color:var(--os-muted);font-weight:700;white-space:nowrap}
+.qt-table td{font-size:12px;white-space:nowrap}
+.qt-table .fs-3{font-size:10px}
+/* 成交/持仓页签(2026-09-17): 弹窗内双视图切换 */
+.qt-tabs{display:flex;gap:6px;margin:0 0 10px}
+/* 操作明细的「标的筛选」(2026-09-28): 挂弹窗头部右侧 —— margin-left:auto 把它顶到 × 左边 */
+.qt-q{max-width:min(300px,40vw);margin-left:auto;margin-right:10px;font-weight:400}
+.qt-qnote{margin:2px 0 8px}
+.qt-qclear{margin-left:8px;padding:1px 8px;border:1px solid var(--os-border);border-radius:var(--r-pill);background:transparent;color:inherit;font-size:12px;cursor:pointer}
+.qt-qclear:hover{border-color:var(--accent);color:var(--accent)}
+.qt-tab{border:1px solid var(--os-border);background:var(--os-surface-2);color:var(--os-muted);font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r-pill);cursor:pointer;transition:.15s;display:flex;align-items:center;gap:6px}
+.qt-tab i{font-style:normal;font-size:10px;font-weight:700;background:rgba(148,163,184,.16);border-radius:var(--r-pill);padding:0 6px;line-height:16px}
+.qt-tab:hover{color:var(--os-text);border-color:var(--accent)}
+.qt-tab.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.qt-tab.on i{background:rgba(255,255,255,.22)}
+/* 「池」标签页上的"未纳入"计数(2026-09-28): 组合里有、样本里没行情的标的只数 ——
+   这是个警告, 用 --warn 提醒"回测里确实没算它", 别让人以为池就这些。 */
+.qt-offpill{font-style:normal;font-size:10px;font-weight:700;color:var(--warn);border:1px solid currentColor;border-radius:var(--r-pill);padding:0 6px;line-height:15px}
+.qt-tab.on .qt-offpill{color:var(--accent-ink);border-color:color-mix(in srgb,var(--accent-ink) 55%,transparent)}
+/* 期末持仓: 占比条 + 现金行 */
+.qt-hold-sum{padding:0 0 8px;line-height:1.7}
+.qt-hold-sum b{color:var(--os-text)}
+/* 成交明细分页条(2026-09-18): 只渲染当前页 + 翻页/每页笔数 */
+.qt-pager{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:0 0 8px;font-size:12px}
+.qt-pager b{color:var(--os-text)}
+.qt-pg-btns{display:flex;gap:5px}
+.qt-pg-btn{border:1px solid var(--os-border);background:var(--os-surface-2);color:var(--os-text);font-size:12px;font-weight:600;padding:3px 12px;border-radius:var(--r-pill);cursor:pointer;transition:.15s}
+.qt-pg-btn:hover:not(:disabled){border-color:var(--accent);background:rgba(var(--accent-rgb),.14)}
+.qt-pg-btn:disabled{opacity:.35;cursor:default}
+.qt-pg-size{border:1px solid var(--os-border);background:var(--os-surface-2);color:var(--os-text);font-size:12px;padding:3px 6px;border-radius:var(--r-pill);cursor:pointer}
+.qt-pctcell{position:relative;min-width:110px}
+.qt-bar{position:absolute;left:0;top:50%;transform:translateY(-50%);height:60%;max-width:100%;background:linear-gradient(90deg,rgba(var(--accent-rgb),.32),rgba(var(--accent-rgb),.14));border-radius:var(--r-tag)}
+.qt-pct{position:relative;font-size:12px;font-weight:600;color:var(--os-text)}
+.qt-cash td{color:var(--os-muted)}
+.qt-cash .qt-bar{background:linear-gradient(90deg,rgba(148,163,184,.22),rgba(148,163,184,.08))}
+/* 「池」视图的"没进样本"说明行(2026-09-28): 换行显示、警号色, 让人一眼看到*为什么*那只票不在池里 */
+.qt-offnote{margin:6px 0 0;padding:6px 9px;border-left:2px solid var(--warn);border-radius:0 var(--r-ctl) var(--r-ctl) 0;background:rgba(245,158,11,.10);color:var(--os-text);font-size:12px;line-height:1.65}
+.qt-offnote b{color:var(--warn)}
+/* 回测表"口径"列: 只留名字, 点它开设置弹窗(勾选框已搬到图上, 2026-09-18) */
+.q-scheme-name{cursor:pointer;border-bottom:1px dashed transparent}
+.q-scheme-name:hover{color:var(--accent);border-bottom-color:currentColor}
+/* 口径行尾的"移出对比表"× (2026-09-19): 常驻但很淡, 悬停才变红 —— 不抢口径名的点击区域 */
+.q-scheme-del{background:none;border:none;color:var(--os-muted);opacity:.45;cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 7px;vertical-align:middle}
+.q-scheme-del:hover{opacity:1;color:var(--up)}     /* 轴②: 删除=红 */
+/* 口径名后的「对照」角标(2026-09-26): 随机对照(打乱分)/横截面标准化是尺子与实验, 不是候选 ——
+   用中性灰而不是强调色, 免得它看起来像一条可选策略。判据在后端一处(quant._quant_is_ctrl)。 */
+.q-ctrl{display:inline-block;font-style:normal;font-size:10px;font-weight:700;margin-left:5px;padding:0 4px;
+  border-radius:var(--r-tag);background:color-mix(in srgb,#94a3b8 22%,transparent);color:var(--os-muted);
+  vertical-align:1px;cursor:help;white-space:nowrap}
+/* 「参数」弹窗·已移出对比表的内置口径: 点 × 放回来(复用 chip 样式) */
+.chip .q-hidden-x{background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px;line-height:1;padding:0 0 0 6px}
+.chip .q-hidden-x:hover{color:var(--os-text)}
+/* 口径设置弹窗(2026-09-20: 权重从 4 个框加到 6 个 → 470px 会换行, 放宽到 560) */
+.qmodal.qmodal-sm{width:560px}
+.q-sset-note{font-size:11px;color:var(--os-muted);line-height:1.6;margin:2px 0 10px}
+.q-sset-foot{display:flex;gap:8px;justify-content:flex-end;align-items:center;padding-top:10px;border-top:1px solid var(--os-border)}
+.q-sset-foot #qSchemeDel{margin-right:auto}
+/* 回测表行: 双击只看明细弹窗, 不触发浏览器文字选中(2026-09-17 用户要求) */
+#quantBody tr{user-select:none}
+
+/* ===== 全局视觉打磨(2026-09-15): 滚动条/行hover/按钮过渡/焦点/遮罩/选中色 ===== */
+/* 全局细滚动条: 深色主题下默认滚动条粗且亮, 统一为细圆角悬浮条 */
+*{scrollbar-width:thin;scrollbar-color:rgba(148,163,184,.28) transparent}
+*::-webkit-scrollbar{width:9px;height:9px}
+*::-webkit-scrollbar-thumb{background:rgba(148,163,184,.26);border-radius:var(--r-pill);border:2.5px solid transparent;background-clip:padding-box}
+*::-webkit-scrollbar-thumb:hover{background:rgba(148,163,184,.45);border:2.5px solid transparent;background-clip:padding-box}
+*::-webkit-scrollbar-track,*::-webkit-scrollbar-corner{background:transparent}
+html.theme-light *::-webkit-scrollbar-thumb{background:rgba(71,85,105,.30);border:2.5px solid transparent;background-clip:padding-box}
+html.theme-light *::-webkit-scrollbar-thumb:hover{background:rgba(71,85,105,.48);border:2.5px solid transparent;background-clip:padding-box}
+/* 表格行: 分割线用主题token, hover 微亮 + 平滑过渡 */
+.table td{border-color:var(--os-border)}
+.table tbody tr{transition:background .12s}
+.table tbody tr:hover{background:rgba(148,163,184,.055)}
+html.theme-light .table tbody tr:hover{background:rgba(15,23,42,.035)}
+/* 按钮/输入: 统一圆角与过渡节奏 */
+/* 这一条原来写 --r-ctl, 把上面第 132 行的胶囊口径盖回去了(同一个选择器, 后写的赢)。
+   Coinbase 规矩: 可点的 → 胶囊。这里跟着改成 --r-pill, 全站按钮回到一个口径。 */
+.btn{border-radius:var(--r-pill);transition:background .15s,border-color .15s,color .15s,box-shadow .15s}
+.form-control,.form-select{border-radius:var(--r-ctl);transition:background .15s,border-color .15s,box-shadow .15s}
+.form-control:hover{border-color:rgba(148,163,184,.35)}
+/* 键盘导航焦点环(鼠标点击不出现) */
+/* 全局焦点环(鼠标点击不出现)。2026-09-29: 原来那条是 outline 版, 与统一口径层里那枚
+   --ring 描边版**并存**(两条都命中 :focus-visible, 后写的赢) —— 于是同一枚按钮在
+   不同组件上长出两种焦点样式。这里改成转发到 --ring, 全站只剩一个口径。 */
+:focus-visible{outline:none;box-shadow:var(--ring)}
+/* 遮罩统一: 更深的night蓝 + 磨砂, 弹层更聚焦 */
+.drawer-backdrop,.qmodal-backdrop{background:rgba(2,6,14,.62);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.cmd-backdrop{background:rgba(2,6,14,.62)}
+/* 选中 tab 轻光晕, 强化"当前在哪" */
+.top-tabs .tab.active{box-shadow:0 2px 12px -3px rgba(var(--accent-rgb),.6)}
+/* 文本选中色与品牌色一致 */
+::selection{background:color-mix(in srgb,var(--accent) 38%,transparent);color:var(--os-text)}
+html.theme-light ::selection{background:rgba(var(--accent-rgb),.20);color:inherit}
+/* 大数字标题微收字距, 更接近行情终端排版 */
+.card .h1{letter-spacing:-.02em}
+
+/* 模块5 卡头:「展示历史数据」切换按钮**已删**(2026-09-26 用户口径: 建了真实账户净值记分牌之后就不必
+   再分"含不含历史数据"两种样本了) —— 样本恒为历史重建样本, 见 app.js 的 QUANT_HIST_SRC。
+   .q-histbtn 这条样式随之作废, 一并删掉(费率仍收在「参数」弹窗里)。 */
+/* 模块5 卡头: 「回测时间」小胶囊(2026-09-20 用户要求) —— 挂在标题右边的副标题位。
+   放在这里而不是放表格上方: 不占纵向空间, 滚到表格也不容易被忽略; 悬停出完整口径。
+   数字用等宽(tabular-nums): 秒位每跳一次不会把后面的按钮推来推去。 */
+.q-runat{margin-left:10px;flex:0 0 auto;font-size:11px;font-weight:600;color:var(--os-muted);
+  background:var(--os-surface-2);border:1px solid var(--os-border);border-radius:var(--r-pill);padding:2px 9px;
+  font-variant-numeric:tabular-nums;cursor:default;white-space:nowrap}
+.q-runat[hidden]{display:none}
+/* 「回测」按钮的"灰态"(.q-nodata)已于 2026-09-20 按要求删除: 按钮恒可点, 不再有"没变化就不可点"这一态。 */
+
+/* ---------- 收盘准备(2026-09-20) ----------
+   交易日收盘后第一次打开系统 → 服务端按序跑「模块5 收盘数据落位 → AI 四步」, 这里显示进度。
+   配色刻意避开 --up/--down(本仓库里它们=涨红跌绿), 免得进度条上的 ✓/✗ 被读成行情方向:
+   成功用 emerald、失败用 --up 的红(报错的通用色)、进行中用 --accent、跳过/未跑用 muted。 */
+.cp-sub{font-size:12px;color:var(--os-muted);line-height:1.6}
+.cp-bar{position:relative;height:22px;margin:9px 0 12px;border:1px solid var(--os-border);border-radius:var(--r-ctl);
+  background:var(--os-surface-2);overflow:hidden}
+.cp-bar i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:var(--r-pill);
+  background:linear-gradient(90deg,rgba(var(--accent-rgb),.85),rgba(var(--accent-rgb),.42));transition:width .4s ease}
+.cp-bar span{position:relative;display:block;text-align:center;font-size:11px;line-height:22px;color:var(--os-text)}
+.cp-steps{list-style:none;margin:0;padding:0}
+.cp-steps li{display:flex;gap:8px;align-items:baseline;padding:6px 0;font-size:12px;border-top:1px solid var(--os-border)}
+.cp-steps li:first-child{border-top:none}
+.cp-ic{flex:0 0 16px;text-align:center;font-weight:700}
+.cp-lab{flex:0 0 116px;font-weight:700}
+.cp-msg{flex:1 1 auto;min-width:0;color:var(--os-muted);font-size:11px;line-height:1.5;word-break:break-word}
+.cp-sec{flex:0 0 48px;text-align:right;color:var(--os-muted);font-size:11px}
+.cp-ok .cp-ic{color:#34d399}
+.cp-fail .cp-ic{color:var(--up)}
+.cp-run .cp-ic{color:var(--accent)}
+.cp-skip .cp-ic,.cp-wait .cp-ic{color:var(--os-muted)}
+.cp-fail .cp-lab{color:var(--up)}
+.cp-wait{opacity:.62}
+.cp-note{margin-top:10px;font-size:11px;line-height:1.7;color:var(--os-muted);
+  background:rgba(var(--accent-rgb),.07);border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:7px 9px}
+.cp-note:empty{display:none}
+.cp-foot{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+.cp-foot .fs-3{flex:1 1 auto;min-width:120px}
+
+/* 2026-09-28: 原「Skills 观点」子视图的全部样式(.sv-* / #xqTabs)随该模块整体删除。 */
+
+/* ==========================================================================
+   加载过渡动画 (2026-09-21 用户要求: "给本系统的所有加载都加入过渡动画, 以不显得卡顿")
+   三层, 互相独立, 任何一层失效都不影响功能:
+     ① #osProgress 顶部进度条 —— 任何在飞的 API 请求都算数(app.js 的 api() 里挂引用计数)。
+        延迟 180ms 才露面: 本地秒回的请求不会闪一下; 后台轮询/定时刷新被 osQuiet 包住(不进进度条),
+        否则每 15s 自动刷新闪一次, 比不做还糟。
+     ② .os-skel 骨架屏 —— 首屏 / 无缓存时的占位, 用流光块代替「加载中…」四个字。
+     ③ .os-enter 入场动画 —— 内容落地时淡入上移, 由 app.js 的动画引擎判定后加类:
+        只在「占位→真内容」「刚切视图」「刚开抽屉/弹窗」时播, 定时回写行情不重放。
+   无障碍: 系统开启「减弱动态效果」时全部关闭(见文件末尾 reduced-motion 段)。
+   ========================================================================== */
+
+/* ---- ① 顶部进度条 ---- */
+#osProgress{position:fixed;top:0;left:0;right:0;height:2px;z-index:2100;pointer-events:none;opacity:0;transition:opacity .26s ease}
+#osProgress.on{opacity:1}
+#osProgress .os-bar{height:100%;width:30%;border-radius:0 2px 2px 0;
+  background:linear-gradient(90deg,rgba(var(--accent-rgb),0),var(--accent));
+  box-shadow:0 0 10px rgba(var(--accent-rgb),.5);
+  animation:osBarRun 1.15s cubic-bezier(.45,.05,.35,1) infinite}
+#osProgress.done .os-bar{width:100%;border-radius:0;animation:osBarDone .34s ease-out both}
+@keyframes osBarRun{0%{transform:translateX(-110%)}100%{transform:translateX(360%)}}
+@keyframes osBarDone{from{transform:translateX(-100%);opacity:1}to{transform:translateX(0);opacity:.72}}
+
+/* ---- ② 骨架屏 ---- */
+.os-skel{position:relative;overflow:hidden;background:rgba(148,163,184,.13);border-radius:var(--r-ctl)}
+.os-skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(148,163,184,.26),transparent);
+  animation:osSkel 1.3s ease-in-out infinite}
+@keyframes osSkel{to{transform:translateX(100%)}}
+html.theme-light .os-skel{background:rgba(15,23,42,.07)}
+html.theme-light .os-skel::after{background:linear-gradient(90deg,transparent,rgba(15,23,42,.09),transparent)}
+.os-skel-line{height:10px;margin:7px 0}
+.os-skel-inline{display:inline-block;vertical-align:middle;width:120px}
+.os-skel-block{width:100%;height:100%;min-height:78px}
+.os-skel-cv{min-height:112px}
+.os-skel-tile{height:62px;border-radius:var(--r-ctl)}
+.os-skel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.os-skel-stack{display:flex;flex-direction:column;gap:9px;padding:2px 0}
+.os-skel-tr>td{padding-top:12px!important;padding-bottom:12px!important}
+.os-skel-tr>td .os-skel-line{margin:0}
+
+/* ---- ③ 内容入场 / 视图切换 ---- */
+.os-enter{animation:osEnter .36s cubic-bezier(.22,.61,.36,1) both;animation-delay:var(--os-d,0ms)}
+@keyframes osEnter{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+.os-enter-soft{animation:osFadeIn .4s ease both;animation-delay:var(--os-d,0ms)}
+@keyframes osFadeIn{from{opacity:0}to{opacity:1}}
+.panel.active{animation:osFadeIn .26s ease both}
+.qmodal{will-change:opacity}
+@keyframes osDialogIn{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}
+.drawer.open .drawer-body{animation:osFadeIn .3s ease}
+/* 数字/价格换值时颜色渐变过去, 而不是"啪"地跳一下(定时刷新时尤其明显) */
+.num,.h1,.mg-px,.mg-pct,.dt-p{transition:color .35s ease}
+canvas{transition:opacity .3s ease}
+
+/* ---- 长任务按钮的忙碌态(转圈) ---- */
+.os-spin{display:inline-block;width:11px;height:11px;margin-right:6px;vertical-align:-1px;
+  border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:osSpin .7s linear infinite}
+@keyframes osSpin{to{transform:rotate(360deg)}}
+.btn.os-busy{opacity:.72;cursor:progress;pointer-events:none}
+
+@media (prefers-reduced-motion:reduce){
+  #osProgress{display:none}
+  .os-skel::after{animation:none;opacity:0}
+  .os-enter,.os-enter-soft,.panel.active,.drawer.open .drawer-body{animation:none!important}
+  .os-spin{animation:none;border-top-color:currentColor;opacity:.65}
+  .num,.h1,.mg-px,.mg-pct,.dt-p,canvas{transition:none}
+  .vv-body,.vv-head,.vv-card,.vv-caret{transition:none}   /* 抽屉开合不做动画 */
+  /* 报逆风的卡: 关掉闪烁, 但**保留绿框**(颜色是语义, 只去掉呼吸动作 —— 别把警报一起关掉) */
+  .mm-alarm::after{animation:none;opacity:1}
+}
+
+/* ========== 「框架」模块(2026-09-24) + 持仓热力图分层视图 ========== */
+/* ---- 热力图: 按组合层分块(外层 squarify 给层, 内层给成员) ---- */
+.heat-grp{position:absolute;border:1px solid var(--hg-c,var(--os-border));border-radius:var(--r-ctl);
+  /* 淡底色走层色(--hg-c 由 paintHeatGrouped 逐框写进 style): 一列有一层淡淡的同色, 才读得出"这是一组" */
+  background:color-mix(in srgb,var(--hg-c,#868e96) 7%,transparent);overflow:hidden;box-sizing:border-box}
+.heat-grp-none{border-style:dashed}
+.heat-grp .hg-hd{position:absolute;left:8px;top:0;height:20px;line-height:20px;font-size:11px;font-weight:700;
+  letter-spacing:.2px;white-space:nowrap;overflow:hidden;max-width:calc(100% - 12px);color:var(--hg-c,var(--os-text))}
+.heat-grp .hg-pct{font-weight:600;opacity:.72;margin-left:6px;font-variant-numeric:tabular-nums}
+/* 分组名右边的当日涨跌: 颜色走 .up/.down(红涨绿跌), 与格子里的涨跌同一套口径 */
+.heat-grp .hg-chg{font-weight:700;margin-left:6px;font-variant-numeric:tabular-nums}
+/* ---- 分层视图拖动换层(2026-09-24 用户: 分组逻辑就在热力图这里改) ---- */
+/* 引导语只跟分块态出现(app.js 里按 #heatHint.hidden 切), 平铺态没有落点不该提示 */
+.heat-hint{font-size:11px;color:var(--os-muted, #8a93a0);margin-right:8px;white-space:nowrap}
+.heat-tile[draggable="true"]{cursor:grab}
+.heat-tile.dragging{opacity:.35;cursor:grabbing}
+/* 落点高亮: 用 outline 不用 border —— .heat-grp 的 border 颜色是层色, 改它会看着像换了层。
+   色走 --accent(两套主题都定义了), 别用 --os-primary: 这个变量在本项目里根本不存在。 */
+.heat-grp.drag-in{outline:2px dashed var(--accent);outline-offset:-3px;
+  background:color-mix(in srgb,var(--accent) 12%,transparent)}
+
+/* ---- 投资地图: 纵向流 + 每格一张卡, 卡头一行(类别/标题/AI 结论/编辑工具) ---- */
+/* 顶层默认一格一行(flex-basis:100%); 只有 .fr-row(相邻的无子格顶层格)会挤到同一排 ——
+   见 app.js 的 frameLeafRowIds。2026-09-24 用户: 现金流地基/特殊机会/现金 要跟产业链那三格并排。 */
+.fr-flow{display:flex;flex-wrap:wrap;gap:0 10px}
+.fr-flow > .fr-node{flex:1 1 100%}
+.fr-flow > .fr-node.fr-row{flex:1 1 236px;min-width:210px}
+.fr-loading{font-size:12px;padding:14px 0}
+/* .fr-node 自己是 flex 列: 同一排里卡片被拉齐到等高, 内容再靠 .fr-live{margin-top:auto} 沉底 ——
+   否则成员区各卡高度不一, 一排看过去像错位(2026-09-24 用户"有点乱") */
+.fr-node{position:relative;padding-left:22px;display:flex;flex-direction:column}
+.fr-node.d1{padding-left:26px}
+.fr-node.d2{padding-left:26px}
+/* 左侧竖线 + 圆点: 让人一眼看出这是一条从上到下的推导图, 不是一堆卡片 */
+.fr-node::before{content:"";position:absolute;left:8px;top:0;bottom:0;width:1px;background:var(--os-border)}
+.fr-node:first-child::before{top:14px}
+.fr-node:last-child::before{bottom:auto;height:14px}
+.fr-node::after{content:"";position:absolute;left:5px;top:14px;width:7px;height:7px;border-radius:50%;
+  background:var(--os-surface);border:1.5px solid var(--accent)}
+/* 顶层格之间画一个向下箭头(用户那张地图的阅读方向就是从上往下) */
+.fr-flow > .fr-node:not(:last-child) > .fr-card::after{content:"↓";position:absolute;left:50%;bottom:-19px;
+  transform:translateX(-50%);font-size:12px;line-height:1;color:var(--os-muted);pointer-events:none}
+/* 并排的那一排不画向下箭头: 一行四个箭头会互相打架, 而且卡片不等高时箭头各飘各的 */
+.fr-flow > .fr-node.fr-row > .fr-card::after{display:none}
+.fr-card{position:relative;background:var(--os-surface-2);border:1px solid var(--os-border);border-radius:var(--r-ctl);
+  padding:9px 12px;margin:0 0 26px;transition:border-color .16s ease,box-shadow .16s ease;
+  display:flex;flex-direction:column}
+.fr-node > .fr-card{flex:1 1 auto}
+.fr-node.d1 > .fr-card,.fr-node.d2 > .fr-card{margin-bottom:12px;background:color-mix(in srgb,var(--os-surface) 70%,var(--os-surface-2))}
+.fr-card:hover{border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+.fr-card.editing{border-color:var(--accent);box-shadow:0 0 0 .15rem color-mix(in srgb,var(--accent) 22%,transparent)}
+.fr-card.fr-drop-hint,.fr-kids.fr-drop-hint{border-color:var(--accent);border-style:dashed;
+  background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.fr-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:22px}
+/* 类别标签不再描边(2026-09-24): 原来它和成员 chip 一样是个圆角框, 一排看过去分不清"这是什么类"和"持了哪几只" */
+.fr-kind{font-size:10px;font-weight:600;letter-spacing:.4px;color:var(--os-muted);
+  border-radius:var(--r-pill);padding:1px 0;white-space:nowrap;opacity:.85}
+/* 显式写 color 而不是靠继承: tabler `.card` 的墨色跟的是 data-bs-theme, 和站点自己的 --os-text 是两套真值,
+   钉在 --os-text 上夜间实测 16.8:1(走继承是 14.0:1)。2026-09-25 用页面自己的主题按钮复测过。 */
+.fr-title{font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--os-text)}
+.fr-text{font-size:12px;line-height:1.6;color:var(--os-muted);margin-top:4px;max-width:82ch}
+/* AI 体检的 顺/偏/警 顶到行尾, 与标题之间留出弹性空隙 —— 之前它紧贴标题, 三个小框挤在一起 */
+.fr-state{font-size:11px;font-weight:800;border-radius:var(--r-tag);padding:0 6px;line-height:16px;border:1px solid transparent;margin-left:auto}
+.fr-state.ok{color:var(--up);border-color:color-mix(in srgb,var(--up) 40%,transparent)}      /* 顺 = 好 → 红(轴①) */
+.fr-state.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+.fr-state.bad{color:var(--down);border-color:color-mix(in srgb,var(--down) 45%,transparent)}  /* 警 = 坏 → 绿(轴①) */
+/* 子层: 横排成"这一层的三种情况", 窄屏自动换行。
+   ⚠️ 子格那一排要和顶层格用**同一套列格**(2026-09-25 用户"上下3个对齐"): `.fr-kids` 在父卡的
+   1px 边框 + 12px padding 里(内缩 13px), 子节点自己又缩进 26px → 产业链那三格比下面组合层那三格
+   右移 39px、每列窄 18px, 两排上下对不上。负 margin 把这两层缩进一起抵掉:
+   左 -35 = -(13 父卡内缩 + 22 子格缩进), 右 -13 = 父卡内缩; 再把列距 8→10、子格缩进 26→22 跟顶层对齐,
+   于是子格卡片的左边界/列距/右边界与顶层格逐像素相同, 左侧竖线也并到同一条主脊上。 */
+.fr-kids{display:flex;flex-wrap:wrap;gap:10px;margin:9px -13px 0 -35px;padding:2px 0 4px}
+.fr-kids:empty{display:none}
+.fr-kids .fr-node{flex:1 1 236px;min-width:210px}
+/* 缩进收到 22px 才和顶层格同一条竖线; 写在 .fr-node.d1/.d2 之后才盖得住(同特异度靠顺序) */
+.fr-kids > .fr-node{padding-left:22px}
+.fr-addkid{align-self:stretch;display:inline-flex;align-items:center;justify-content:center;min-width:88px;
+  /* .fr-kids 为了跟顶层格同列格往左探出 35px、往右探出 13px(见上), 这个"＋加子节点"占位块是编辑态
+     里唯一有可见边框的东西, 不自己缩回来的话会探到卡片外面(2026-09-25 实测 x=45 而卡片在 67) */
+  margin-left:35px;margin-right:13px;
+  font-size:11px;color:var(--os-muted);border:1px dashed var(--os-border);border-radius:var(--r-ctl);padding:0 10px;cursor:pointer}
+.fr-addkid:hover{color:var(--accent);border-color:var(--accent)}
+/* 编辑工具条 */
+.fr-acts{margin-left:auto;display:inline-flex;align-items:center;gap:3px}
+/* 状态 chip 已经用 margin-left:auto 顶到右边了, 工具条再 auto 会把空白一分为二(chip 跑到中间) */
+.fr-hd .fr-state + .fr-acts{margin-left:6px}
+.fr-btn{all:unset;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:var(--fs-12);line-height:1.4;color:var(--os-muted);border:1px solid var(--os-border);
+  border-radius:var(--r-pill);padding:3px 9px;background:var(--os-surface);min-height:var(--ctl-xs);box-sizing:border-box}
+.fr-btn:hover{color:var(--os-text);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.fr-btn[disabled]{opacity:.35;cursor:not-allowed}
+.fr-grip{cursor:grab;font-size:12px;color:var(--os-muted);padding:0 3px;letter-spacing:-1px}
+/* 联动数据条: 目标条 → 指标行 → 成员区, 三行各占一条固定高的槽(没有的那格留空也占位)。
+   原来整块 margin-top:auto 沉底 → 成员多的格子把目标条/指标一起顶上去, 同一排三条横线各在各的高度
+   (2026-09-25 用户"各部分的比例尽可能协调统一一下")。改成从共同起点往下排, 齐的是**上沿**。 */
+.fr-live{margin-top:8px;padding-top:8px;display:grid;grid-template-rows:auto auto auto;
+  align-content:start;gap:6px;flex:0 0 auto}
+/* 三条槽要**点名**放, 不能让 grid 自动摆: 只有一块内容的格子(风控那种纯指标行、宏观那种纯 chip)
+   会被自动摆进第 1 条 11px 的槽里, 内容挤成一坨(2026-09-25 实测 .fr-mem 高 9px)。 */
+.fr-live>.fr-barrow{grid-row:1}
+.fr-live>.fr-stats{grid-row:2}
+.fr-live>.fr-mem{grid-row:3}
+/* 一张格里可以有好几块 .fr-mem(指标行 + 宏观错配药丸 + 「约束口径」那颗 tip), 上面那条把它们**全点名到
+   第 3 行** —— 同一格里放多个 grid 项, Grid 不会叠放也不会换行, 而是**自动往右开隐式列**:
+   实测 人民币升值 那格 grid-template-columns 变成 "205px 214px 98px"(卡片本身只有 236px)
+   ⇒ 第二、三块整块探到卡片外面, 压在右边的邻居卡上(2026-09-26 用户截图"显示好多问题")。
+   往下顺延行号, 第 4/5 行走隐式 auto 行轨: 没有额外 .fr-mem 的格子不会因此多占高度。 */
+.fr-live>.fr-mem~.fr-mem{grid-row:4}
+.fr-live>.fr-mem~.fr-mem~.fr-mem{grid-row:5}
+/* 再多一块也照样顺延(现在最多 3 块: 指标行 + 错配药丸 + 反向受益; 这条是给以后加格子的人兜底,
+   漏了就会重新撞回"隐式列"那个坑)。 */
+.fr-live>.fr-mem~.fr-mem~.fr-mem~.fr-mem{grid-row:6}
+/* 说明固定占两行高(只有一行的格子也占两行) —— 同一排下面那条"联动区"才有共同的起点。
+   同样只给并排的格子用: 独占整行的格子钉两行只是把一句话下面垫出一个空洞。 */
+.fr-kids>.fr-node>.fr-card>.fr-text,.fr-flow>.fr-node.fr-row>.fr-card>.fr-text{min-height:2lh}
+/* 只有"同一排并排好几格"的那些卡片才把三条槽钉成等高(没有的那条留空也占位) —— 同排的目标条/指标行/
+   成员区才落在同一条线上。独占整行的格子(勾了"单独占一行"的那几格)没有对齐对象,
+   钉死就是白留一个空洞。
+   (举例两次失效的教训: 2026-09-27 这里举的是「长期目标」, 那一格删了; 2026-09-29 换成
+    「组合风险管理」, 那一格也删了 —— 所以下面不再写死格子名, 只看 wide 标记本身。) */
+.fr-kids>.fr-node>.fr-card>.fr-live,.fr-flow>.fr-node.fr-row>.fr-card>.fr-live{
+  grid-template-rows:11px minmax(20px,auto) auto}
+
+/* ---- 空槽收回 + 按内容定高(2026-09-30 第五十改) ----
+   上面那三条槽是给"同一排并排的格子"对齐用的, 前提是**这一排真有目标条/指标行**。
+   一排里一个 .fr-barrow 都没有时(最典型 = 「宏观判断」下面那四格 —— 中国需求弱 / 中国供给强 /
+   人民币升值 / 全球环境变化, 联动区只有一排读数 chips + 报警行), 第 1 条 11px 与第 2 条
+   minmax(20px,auto) 就是两条纯空白: 实测每格白留 11+6+20+6 = **43px**, 四格都白, 而它们互相之间
+   根本没有要对齐的东西 —— 用户 2026-09-30:"宏观判断里面的四个格子中间都好多空白啊, 我知道是留给
+   可能存在的(联动)内容的, 不过可以动态调整啊, 现在这样不好看"。
+   ⇒ app.js 在这种排/这种格上挂 `.nopin`(判据 = 渲染出来的 html 里有没有 class="fr-barrow",
+     数据驱动, 见 frameNodeHtml), 这里做两件事:
+     ① 撤掉那三条槽: 内容按 **DOM 顺序**自己排。DOM 顺序本来就是 barrow→stats→mem→mal
+        (见 frameLiveHtml), 所以撤掉显式行号后顺序一个字都不变 —— 顺带还避开"多个 .fr-mem 各占一个
+        显式行号 → Grid 自动往右开隐式列"那个坑(那条坑的解法本来就是"别让它们落在同一行")。
+     ② 同排不再等高: 卡片按自己的内容定高。等高本来是 ① 的副产品, 留着只会让没内容的那一格
+        白留一截(「中国供给强」实测曾白留 218px)。有报警就长、没有就缩回去 = 用户要的"动态调整"。
+   ⚠️ `.lyr3`(六个组合层那排定三列的 grid)不进 ②: 它那排真有条, 而且"同排等宽等高"是 2026-09-25
+      用户明确要的(见 frameLayerKids 上面那段)。这里只把 ① 给它(它也永远不会命中)。
+   ⚠️ 别把这三条并进上面那条钉槽规则里 —— 那条是"有目标条时照样钉", 两条互为反面, 分开写才读得懂。 */
+.fr-kids.nopin>.fr-node>.fr-card>.fr-live,
+.fr-flow>.fr-node.fr-row.nopin>.fr-card>.fr-live{grid-template-rows:none}
+.fr-kids.nopin>.fr-node>.fr-card>.fr-live>*,
+.fr-flow>.fr-node.fr-row.nopin>.fr-card>.fr-live>*{grid-row:auto}
+.fr-kids.nopin:not(.lyr3){align-items:flex-start}
+.fr-flow>.fr-node.fr-row.nopin{align-self:flex-start}
+.fr-chip{font-size:11px;line-height:1.5;color:var(--os-text);background:var(--os-surface);
+  border:1px solid var(--os-border);border-radius:var(--r-pill);padding:1px 9px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.fr-chip b{font-weight:800}
+.fr-chip.big{font-size:12px;border-color:color-mix(in srgb,var(--accent) 34%,transparent)}
+.fr-chip.ok{color:var(--up);border-color:color-mix(in srgb,var(--up) 38%,transparent)}        /* 好(如持仓只数在上限内) → 红 */
+.fr-chip.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 42%,transparent)}
+.fr-chip.bad{color:var(--down);border-color:color-mix(in srgb,var(--down) 42%,transparent)}   /* 越限/超上限 → 绿 */
+.fr-chip.none,.fr-chip.more{color:var(--os-muted);border-style:dashed}
+.fr-chip.tip{color:var(--os-muted);font-size:11px}
+.fr-chip.mem{cursor:pointer}
+/* 药丸默认 white-space:nowrap, 而"指标 值 单位 涨跌%"这种长药丸要 236px, 窄屏(≤1150)那一排子格只有
+   ~249px 宽(卡片左右各 13px padding) ⇒ 越出边框 22px。放开 .fr-mem 里药丸的换行: 放不下就在**空格处**
+   折成两行, 宽屏一行照旧(实测 1440/1920 全部仍是单行)。不用 ellipsis 截 —— 这些药丸上的数字就是结论。 */
+.fr-mem{min-width:0}
+.fr-mem>.fr-chip{max-width:100%;white-space:normal;overflow-wrap:break-word}
+.fr-chip.mem:hover{border-color:var(--accent);color:var(--accent)}
+/* 组合层格子里的成员: **红框=模块1 建议加仓/建仓, 绿框=建议减仓**(取代原来那句"加N · 减N", 2026-09-24)。
+   红加绿减是 A 股语义(红涨绿跌), 与模块1 的 `.adv-tag.add/.cut` 同一套 —— 之前这里反了, 用户 09:55 指出。
+   放在 :hover 之后 —— 有方向的 chip 悬停时保持原色, 别被通用蓝框洗掉。 */
+.fr-chip.mem.add{border-color:var(--up);color:var(--up)}
+.fr-chip.mem.cut{border-color:var(--down);color:var(--down)}
+.fr-chip i{font-style:normal;opacity:.7;font-size:10px}
+.fr-chip em{font-style:normal;font-weight:700}
+/* 指标行(占比/只数/均分/逆风数): 去掉框和底, 只留"数粗、标签淡" —— 有框的那种圆角片从此只代表可点的标的 */
+.fr-stats{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 12px;width:100%;line-height:1.55}
+.fr-stats .fr-chip{border:0;background:none;padding:0;color:var(--os-muted);white-space:normal}
+.fr-stats .fr-chip b{font-weight:800}
+.fr-stats .fr-chip.big{font-size:13px;color:var(--os-text)}
+.fr-stats .fr-chip.ok{color:var(--up)}
+.fr-stats .fr-chip.warn{color:var(--warn)}
+.fr-stats .fr-chip.bad{color:var(--down)}
+.fr-stats .fr-chip.tip{font-size:11px;text-decoration:underline dotted;cursor:pointer}
+/* 指标行里去掉框之后, 可点的那几个(对冲率→风控、未设目标→编辑)靠指针+悬停色认路 */
+.fr-stats .fr-chip[data-act]{cursor:pointer}
+.fr-stats .fr-chip[data-act]:hover{color:var(--accent)}
+/* 成员区固定"上边距 7 + 1px 线 + 内衬 8"(透明线占位, 有指标行在前才染色) ——
+   两种格子的成员区才落在同一条线上; 原来只有 .fr-stats + .fr-mem 那支带 16px, 纯 chip 的格子少 6px。 */
+.fr-mem{display:flex;flex-wrap:wrap;gap:5px;width:100%;margin-top:7px;padding-top:8px;
+  border-top:1px solid transparent}
+/* 成员区上面那条虚线: 把"这一层的数"和"这一层的票"分开(只有指标行在前时才画; 宏观那种纯 chip 格不画) */
+.fr-stats + .fr-mem{border-top-color:var(--os-border);border-top-style:dashed}
+/* ---- 宏观报警(2026-09-26 建; 2026-09-27 父格部分删掉) ----
+   用户口径:"不要把报警、留意单独处理, 合并进下面的四个宏观的格子不就行了" ⇒ 报警**长在它对应的
+   那个宏观判断格子里**(见 app.js 的 malForNode/malRow)。
+   ⛔ 2026-09-27 用户"这些说明不用写啊": 父格那行汇总 chips 与那句 .mal-note 说明**都已删除**
+   (app.js 的 kind==="mismatch" 分支现在直接 return "") ⇒ 只认 .mal-note 的两条 grid 规则一并删了。
+   ⚠️ .fr-live 是显式 grid(row1=bar, row2=stats, row3+=mem) → 报警块必须显式点名行号, 否则落进隐式行。 */
+.fr-live>.fr-mem~.mal{grid-row:4}          /* 子格: 读数 chips(3) → 报警(4) */
+/* 一个宏观格子里的报警区: 一行读完 = 状态药丸 + 名字 + 受影响仓位% + 箭头(只有可点的那两档才有)。
+   ⛔ 2026-09-28 整改(与模块3 的报警弹窗同一批): 只动"长什么样"和"先读哪句", 数据一个字没改。
+      · 状态词从**裸文字**改成**药丸**。之前一格里 8 行(1 条逆风 + 6 条留意 + 1 条顺风)第一列
+        全是同色号的 10.5px 文字, 扫读要一行行读词才知道哪条真有事; 现在第一列就是色块。
+      · 「受影响仓位 %」从 11px 弱灰提成 --font-num 800 的正文色 —— 它是"这条值不值得点开"的
+        **唯一**判据, 之前却是整行最小最淡的一个数。
+      · 行与行之间那条实线细边去掉(8 行密排时全是同一层灰, 只是噪音), 改由药丸和间距分区。
+      · 逆风那一行自己带一层极淡的底, 从一列同款里浮出来。
+      · 明细**不再行内展开**(2026-09-30 用户口径): 逆风/留意点开的是宏观预览那枚同一个弹窗,
+        所以这一格里只剩"一行一条", 结论/凭证全在弹窗里(见 app.js 的 malRow)。 */
+.mal{display:grid;gap:4px;width:100%;margin-top:7px;padding-top:8px;
+  border-top:1px dashed var(--os-border)}
+.mal-loading{font-size:11px;color:var(--os-muted)}
+/* 可点性由 [data-act] 决定(只有 逆风/留意 挂), 样式与行为同一个来源 —— 顺风/缺数据是纯文字行。
+   同款写法见上面的 .fr-stats .fr-chip[data-act]。 */
+/* 2026-10-01 第五十五改(用户「宏观判断部分, 让下面那四个逆风、留意部分的东西能够对齐啊」)。
+   原来这里是 flex + flex-wrap:wrap —— 而换行是**在收缩之前**按每项的"假想宽度"决定的, .mal-t 的假想
+   宽度就是它那行字的完整宽度, 于是窄一点(实测 1400px 起)整行就被拆成两行: 第一行 药丸+名字,
+   第二行 命中仓位%+箭头, 而第二行是从**左边缘**从头排的 ⇒ 同一个格子里行高一会儿 27 一会儿 47,
+   % 与箭头各在各的 x 上, 四格之间那些列自然也谈不上对齐。
+   改成**四列 grid**(药丸 / 名字(可缩, 超了省略号) / % / 箭头): 永远四列、永远一行, 行高统一 27,
+   列边缘与窗口宽度无关地逐像素一致。四格之间那条"报警区顶边"由 app.js 的 frameAlignAlarms 量出来补。
+   (下面 .mal-s/.mal-t/.mal-e/.mal-x 里那几条 flex: 声明现在不生效了, 留着是为了这套规则还能退回 flex。) */
+.mal-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto 9px;align-items:center;gap:2px 7px;
+  padding:4px 7px;cursor:default;font-size:12px;line-height:1.55;border-radius:var(--r-ctl)}
+.mal-row[data-act]{cursor:pointer}
+.mal-row[data-act]:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.mal-row.bad{border-left:2px solid var(--down);padding-left:5px;
+  background:color-mix(in srgb,var(--down) 8%,transparent)}
+.mal-row.warn{border-left:2px solid var(--warn);padding-left:5px}
+.mal-row.none{border-left:2px dashed var(--os-border);padding-left:5px}
+.mal-row.ok{opacity:.62}                    /* 顺风那一档弱化显示: 还在表里, 但不抢注意力 */
+.mal-row.ok:hover{opacity:1}
+/* 状态药丸 —— 颜色同第十六改: 逆风=绿(坏) / 顺风=红(好) / 留意=黄 / 缺数据=灰。
+   名字因此仍对齐成一列(词宽 "缺数据" 三字, 故 min-width 34px)。 */
+.mal-s{flex:0 0 auto;min-width:34px;box-sizing:border-box;text-align:center;
+  font-size:10px;font-weight:800;line-height:1.75;border-radius:var(--r-tag);padding:0 5px}
+.mal-row.bad .mal-s{color:var(--on-down);background:var(--down)}
+.mal-row.warn .mal-s{color:var(--on-warn);background:var(--warn)}
+.mal-row.ok .mal-s{color:var(--on-up);background:var(--up)}
+.mal-row.none .mal-s{color:var(--os-muted);background:var(--os-surface-2)}
+.mal-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mal-e{flex:0 0 auto;min-width:38px;text-align:right;font-family:var(--font-num);
+  font-weight:800;font-size:12px;color:var(--os-text)}
+.mal-row.bad .mal-e{color:var(--down)}
+.mal-row.ok .mal-e{color:var(--os-muted)}
+.mal-x{flex:0 0 auto;width:9px;text-align:center;color:var(--os-muted)}
+.mal-row[data-act]:hover .mal-x{color:var(--accent)}
+/* ⛔ 2026-09-30: 行内展开那一套(.mal-body / .mal-why / .mal-act / .mal-tb / .mal-go)**已整体删除** ——
+   报警行改成点开宏观预览那枚同一个弹窗 #mmAlarmModal(见 app.js 的 malRow), 同一份明细不再有两套画法。
+   要改弹窗里的样子, 去改 #mmAlarmModal 那组 .mm-mo-* 规则(本文件里搜 "mmAlarmModal")。 */
+/* 目标区间条: 一条"轨道 + 现值实心 + 目标刻度" + 右边一句差值话(2026-09-25 用户"有的看不出目标与现状的关系")。
+   原来只给下限的那五层把色带一路铺到轨道末端、还画了条右边界 —— 看着像"目标上限"其实什么都没有。 */
+.fr-barrow{display:flex;align-items:center;gap:6px;width:100%}
+.fr-bar{position:relative;width:100%;height:7px;border-radius:var(--r-pill);
+  background:color-mix(in srgb,var(--os-border) 70%,transparent);overflow:hidden;margin:2px 0 2px}
+.fr-barrow .fr-bar{flex:1 1 auto;min-width:0;margin:0}
+.fr-bar .fr-band{position:absolute;top:0;bottom:0;background:color-mix(in srgb,var(--accent) 22%,transparent);
+  border-left:1px solid color-mix(in srgb,var(--accent) 55%,transparent);
+  border-right:1px solid color-mix(in srgb,var(--accent) 55%,transparent)}
+.fr-bar b{position:absolute;left:0;top:0;bottom:0;border-radius:var(--r-pill);background:var(--accent);opacity:.9}
+.fr-bar.out b{background:var(--down)}   /* 出界=坏 → 绿(轴①)。注: 2026-09-26 起已无代码 emit .out, 留作后备 */
+/* 目标刻度线: 压在实心条**上面**(z-index), 否则"已达标"那几层的条子长过目标位就把线吃掉了(基础层 35.5% vs ≥30)。
+   线用文字色 + 一圈卡片底色光晕, 这样在蓝条/红条/灰轨三种底上都拉得开。 */
+.fr-bar .fr-tick{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;z-index:2;
+  background:var(--os-text);border-radius:1px;
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--os-surface) 92%,transparent)}
+.fr-bartxt{flex:none;font-size:10px;line-height:11px;color:var(--os-muted);white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+.fr-bartxt.out{color:var(--down)}       /* 同上 */
+/* 「未设目标」那格: 这句话本身就是入口(点了进编辑), 跟指标行里的 .tip 同一个规矩 */
+.fr-bartxt.tip{cursor:pointer;text-decoration:underline dotted}
+.fr-bartxt.tip:hover{color:var(--accent)}
+/* 内联编辑表单 */
+.fr-form{margin-top:8px;display:flex;flex-direction:column;gap:7px}
+.fr-form label{font-size:11px;color:var(--os-muted);display:flex;flex-direction:column;gap:3px;flex:1 1 auto}
+.fr-form-row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.fr-in{font-size:12px;background:var(--os-surface);border:1px solid var(--os-border);border-radius:var(--r-ctl);
+  color:var(--os-text);padding:4px 8px;font-family:inherit}
+.fr-in:focus{outline:none;border-color:var(--accent)}
+textarea.fr-in{resize:vertical;min-height:46px;line-height:1.6}
+.fr-in-num{width:74px}
+.fr-in-code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;min-width:210px}
+/* 表单里的勾选框: .fr-form label 是竖排的(选择器权重更高), 这里要横排就得压过它 */
+.fr-form label.fr-chk{flex-direction:row;align-items:center;gap:5px;flex:0 0 auto;white-space:nowrap}
+.fr-form label.fr-chk input{accent-color:var(--accent);width:14px;height:14px;margin:0}
+.fr-form-acts{display:flex;gap:8px;align-items:center}
+/* bind 中文快捷键: 一排小药丸, 上面中文、下面原串 —— 点一下填进输入框, 顺便让人认得原串长什么样 */
+.fr-binds{display:flex;flex-wrap:wrap;gap:5px}
+.fr-bind{display:flex;flex-direction:column;align-items:flex-start;gap:1px;cursor:pointer;text-align:left;
+  font-size:11px;line-height:1.25;color:var(--os-text);background:var(--os-surface-2);
+  border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:3px 7px}
+.fr-bind i{font-style:normal;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+  font-size:10px;color:var(--os-muted)}
+.fr-bind:hover{border-color:var(--accent)}
+.fr-bind.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+/* 顶部那条「体系 ↔ 现值体检」汇总条已删(2026-09-24 用户) —— 体检结论只看每格右上角的 .fr-state chip */
+/* 「隐」掉的格子: 平时整格不画(见 frameNodeHtml), 只有编辑模式画出来并且压淡 —— 好找回来 */
+.fr-node.is-hidden > .fr-card{opacity:.48;border-style:dashed}
+/* ---- 六个组合层格子的照片(2026-09-24 用户: "这6个部分想找合适的素材做背景图") ----
+   素材四轮没换(竖构图、压灰 .55→.12、两级 unsharp;原图右下角那行"Qoder AI 生成"水印已裁),
+   换的是**画法**, 09-29 一天来回四次:
+   · 09-25(用户"背景图还可以更清晰一点"): 斜压在卡片右半、文字叠在上面 → 改成右侧一条独立 32% 图柱。
+     当时浓淡被"文字压在图上"这条约束卡死: 同一批图同一套遮罩下 opacity 从 .26 提到 .42, 最坏对比度
+     就从 4.15:1 掉到 3.10:1 —— 挪开文字才敢给到 .92。
+   · 09-29 上午: 图柱撤掉, 缩成格头一枚图章(理由: 文字列被挤窄、六张图并排成噪声)。
+   · 09-29 傍晚(用户「下面的图标还是做成背景」): 图章也撤, 照片铺满整张卡 + 一层 --fr-veil 面漆。
+   · 09-29 深夜(用户「弄回之前那样的右侧图呀，这样不好看」): **回到 09-25 那条右侧图柱。**
+   ⚠️ 绕这一圈的结论写死在这: 照片要"看得清"就必须让出文字那一栏。整卡铺图就得盖面漆, 而面漆一盖
+      照片就糊 —— 实测夜间要让 12px 正文守住 4.5:1, 面漆得加到 76%(还得把说明文字的墨色从 --os-muted
+      往 --os-text 提一档), 浓到基本看不出是照片。量法留在 _out/_tune_frame_veil.py, 别再重走。 */
+/* 09-29 深夜补: 图柱**左缘做渐变淡出**(用户「那六张图片，要有渐变啊，这样多难看啊」)。
+   原来那条 1px --os-border 硬接缝就是"贴上去的一块图"的来源 —— 撤掉边界、改成 mask 从左往右
+   由透明压到实心(0→52% 之间完成过渡, 右半仍是完整照片), 图就"长"在卡片上而不是"贴"在卡片上。
+   ⚠️ 用 mask 不用"再盖一层渐变 div/背景色": 盖色会把照片压灰(和上面那条面漆的坑同一个),
+      而且文字列右缘在 32%+12px 之外, 淡出区不会碰到任何字。
+   -webkit- 那份是给老 Chromium/Edge 的, 两份都要留。 */
+.fr-card.lyr{padding-right:calc(32% + 12px)}
+.fr-card.lyr::before{content:"";position:absolute;top:-1px;right:-1px;bottom:-1px;width:32%;z-index:0;
+  pointer-events:none;
+  border-radius:0 calc(var(--r-ctl) + 1px) calc(var(--r-ctl) + 1px) 0;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,rgba(0,0,0,.42) 22%,#000 52%);
+  mask-image:linear-gradient(90deg,transparent 0,rgba(0,0,0,.42) 22%,#000 52%);
+  background:var(--fr-bg) center / cover no-repeat}
+.fr-card.lyr > *{position:relative;z-index:1}
+/* 编辑态那一格要摆整张表单, 32% 的图柱只会把输入框挤扁 ⇒ 编辑时把图让开。 */
+.fr-card.lyr.editing{padding-right:12px}
+.fr-card.lyr.editing::before{display:none}
+/* 六个组合层那一排定死三列: 同排等宽等高、空仓那两层不再各自长高一截, 第六格(现金)也不再在
+   .fr-kids 那条 flex 行里落单被 flex-grow 拉成整行(进度条拉到 1400px 就是这么来的)。
+   .fr-kids 那对负 margin 是"和顶层格同列格"用的(见上面 .fr-kids), 这里只换排布、不动它。 */
+.fr-kids.lyr3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.fr-kids.lyr3 > .fr-node{min-width:0}
+/* 窄屏三列→两列→一列。断点按**卡片实际能分到多宽**定, 不是按格子数好看:
+   视口 1000px 时地图约 926px, 三列剩 300px/格 —— 再窄成员药丸就要开始一屏一个了。
+   Qoder 内置那一格 ~530px 宽的浏览器最终落到一列。 */
+@media (max-width:999px){
+  .fr-kids.lyr3{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:700px){
+  .fr-kids.lyr3{grid-template-columns:minmax(0,1fr)}
+}
+/* 窄屏(Qoder 内置那一格 ~530px 宽的浏览器就是这样): 顶层那排组合层改回一格一行 ——
+   两格并排时每格只剩 225px, 文字根本没法读(2026-09-25 实测)。 */
+@media (max-width:900px){
+  .fr-flow > .fr-node.fr-row{flex:1 1 100%}
+}
+/* 六张图**必须带 ?v=**: 这 URL 是写在 CSS 里的, 换素材后浏览器会按启发式新鲜度继续用缓存里那张
+   压灰的旧图, 用户刷新生不到变化(2026-09-25 重烘后踩过; index.html 只给 style.css/app.js 带了版本号)。
+   ⚠️ 2026-09-29: 选择器从 `.fr-card.lyr-xxx` 放开成 `.lyr-xxx` —— 这六条只往元素上挂 `--fr-bg`
+   一个变量, 谁取图谁读它(现在是上面那条 `.fr-card.lyr::before`)。放开前缀没有别的继承面。 */
+.lyr-base{--fr-bg:url("/static/img/layers/base.jpg?v=20260925A")}
+.lyr-cycle{--fr-bg:url("/static/img/layers/cycle.jpg?v=20260925A")}
+.lyr-global{--fr-bg:url("/static/img/layers/global.jpg?v=20260925A")}
+.lyr-prod{--fr-bg:url("/static/img/layers/prod.jpg?v=20260925A")}
+.lyr-special{--fr-bg:url("/static/img/layers/special.jpg?v=20260925A")}
+.lyr-cash{--fr-bg:url("/static/img/layers/cash.jpg?v=20260925A")}
+@media (max-width:640px){
+  .fr-node{padding-left:16px}
+  .fr-node::before{left:4px}
+  .fr-node::after{left:1px}
+  .fr-card{margin-bottom:22px}
+  .fr-flow > .fr-node:not(:last-child) > .fr-card::after{display:none}
+  /* .fr-kids 靠负外边距跟顶层格对齐(左 -35 = 13 卡内缩 + 22 缩进)。
+     本块把 .fr-node 缩进收到 16 后左边距得跟着变 -29, 右边那 -13 在 390 视口会把整页
+     顶出 2px 横滚(实测 sw 392 / cw 390)—— 直接归零, 左对齐不受影响。 */
+  .fr-kids{margin-left:-29px;margin-right:0}
+}
+
+/* ⛔ 2026-09-26 删: 原来这里有一条 `.adv-tag .fwd-f` —— 基本面那一维用"预测口径"时钉在建议标签旁的
+   F′ 角标。用户删掉"AI 可信度 >70% 就换基本面口径"那套设置后, F 只剩已披露财报一个口径,
+   这枚角标(连深色主题那条提亮规则)再也不会出现, 一并删掉。 */
+/* ================= 第二十一轮(2026-09-25)全站实测: 夜间主题的小字墨色 =================
+   两份清单都是拿页面自己的 #btnTheme 切主题后逐节点量出来的(只改 theme-* 类会量出假结果,
+   tabler 的墨色跟的是 data-bs-theme)。日间这两组本来就达标, 所以下面全部锁在 theme-dark 上。
+   口径: 只提亮**字**, 填充/边框/投影继续吃原 token —— 把 --accent 整体调浅会让 .btn-primary
+   的白字掉到 2.98:1(现在是 4.47), 那是拆东墙补西墙。
+   2026-09-28: 第一条(机构色小字)已整条删除, 理由写在原位; 剩下的 outline 按钮墨色改成吃令牌。 */
+
+/* 2026-09-28: **整条删除**。原来是把夜间的机构色小字提亮成 indigo-300(#8f96f9), 因为老
+   --accent(#6366f1)压在卡底上只有 3.47~4.12:1, 当小字用不合格。新令牌(--accent #6aa0da)
+   自己就有 5.96~6.88:1, 不需要补丁 —— 留着反而会把 vv-lab / ai-sum-btn / mg-sub a /
+   jv-r 这些地方染成紫色, 与新机构色打架。
+   (原来还要排除 .vv-badge-off 那类"大模型没跑通"的琥珀警示, 现在更不会被误伤。) */
+
+/* Tabler 自带的 outline 按钮墨色是按白底定的(#066fd1/#d63939/#6c7a91), 夜间 3.68/3.80/4.08:1。
+   :not(:hover) 是必需的: 这个选择器比 tabler 的 `.btn-outline-x:hover` 权重高, 不加会把悬停时
+   "实底+白字"那套一起顶掉。边框不动 —— 只改字色的话悬停/焦点样式全部保持原样。 */
+html.theme-dark .btn-outline-primary:not(:hover){color:var(--accent)}
+html.theme-dark .btn-outline-danger:not(:hover){color:var(--up)}
+html.theme-dark .btn-outline-secondary:not(:hover){color:var(--os-muted)}
+/* 描边按钮的**边框**跟着字色走: outline-secondary 的边框还是 Tabler 按白底定的 #6c7a91,
+   夜间实测 4.35:1 卡在门槛下(字色那条 1842 行只改了字)。次要按钮全站几十枚,
+   边框统一收进 --os-border 这个口径, 不再留第二个灰。 */
+.btn-outline-secondary{border-color:var(--os-border)}
+/* 描边按钮的**字色**: Tabler 按白底定的 #6c7a91 在日间白卡上实测 4.35:1、在页面底 #f1f2f4 上只有 3.88:1，两处都差一点点到 4.5。这里换成 --os-muted（日间 #4b5058）—— 白底 8.12:1、页底 7.25:1，而且和全站其它次要文字共用同一个变量，不会再长出第三种灰。夜间不用管: 上面已经有 html.theme-dark 那条把它按回 --os-muted。 */
+html.theme-light .btn-outline-secondary:not(:hover){color:var(--os-muted)}
+
+/* 「大V净看空」风控提示(2026-09-25 用户口径: 只要大V净看空, **不影响评分**, 但禁止建仓/建议清仓)。
+   挂在建议标签里的小角标, 用**警示绿** —— 看空=偏空=坏(A 股绿=跌), 见第十六改的"红=好/绿=坏"; 它是风险提示, 不是口径说明。
+   判据只在后端一处(advice.py: V 有值且 < 50 ⟺ 加权净向为负), 前端只显示。 */
+.bear-net{display:inline-block;font-style:normal;font-size:10px;font-weight:800;margin-left:3px;padding:0 3px;
+  border-radius:var(--r-tag);background:color-mix(in srgb,var(--down) 18%,transparent);color:var(--down);vertical-align:1px;cursor:help}
+html.theme-dark .bear-net{color:var(--down);background:color-mix(in srgb,var(--down) 20%,transparent)}
+
+/* 「宏观 × 持仓」角标(2026-09-26 用户"加强宏观与组合之间的联系"):
+   模块1 持仓行上那枚小标记 —— 这只票的钱被哪条宏观判断管着、管到什么程度, 悬停看详情。
+   与 .bear-net 同级同形, 但用**琥珀**: 三个角标可能并排出现(顺风红 / 冻结琥珀 / 净看空绿),
+   三色各占一位才不会看混。判据只在后端(macro.py 的 api_macro_mismatch → by_code), 前端只显示。
+   定位同「净看空」: 只是提示 —— 不改评分、不改目标仓位、不进模块5 回测。
+   ⛔ 2026-09-27 第十六改(用户"模块1的铝顺风为什么又用绿色啊, 感觉又矛盾了" → 随后定案
+   "红绿灯确实是我的失误…统一绿色坏, 红色好吧; 不然永远有矛盾"): 全站统一成**红=好/偏多, 绿=坏/偏空**。
+   ⇒ 顺风那枚改用 **--up(红)**, 与「加仓/建仓」同色 —— 一个红说"好"、一个绿说"坏", 不再有第二种语言。
+   (中间曾短暂用过蓝色 --info, 已随本次统一撤掉: 加一个第三色等于再加一套语言, 正是用户要消灭的东西。)
+   三种角标色: 红=顺风、琥珀=冻结、绿=净看空 —— 全部按"好/中性/坏"一个轴排开。 */
+.mm-mark{display:inline-block;font-style:normal;font-size:10px;font-weight:800;margin-left:3px;padding:0 3px;
+  border-radius:var(--r-tag);background:color-mix(in srgb,#f59e0b 20%,transparent);color:var(--on-tint-warn);vertical-align:1px;cursor:help}
+.mm-mark.ok{background:color-mix(in srgb,var(--up) 16%,transparent);color:var(--on-tint-up)}
+html.theme-dark .mm-mark{color:#fcd34d;background:color-mix(in srgb,#fcd34d 20%,transparent)}
+html.theme-dark .mm-mark.ok{color:var(--up);background:color-mix(in srgb,var(--up) 20%,transparent)}
+
+/* ===== 真实账户净值 · 记分牌(2026-09-26 复核第 4 条, 见 dash_core/nav.py) =====
+   回测涨多少都只是模型, 这条线才是账户。三块: 两条净值线(账户 / 起始篮子死拿) + 事前失败条件。
+   2026-09-26 与「收益归因」合并成一张卡(卡头一枚按钮切两个视图): 这块不再是独立盒子 —— 外面已经有
+   .card-body 的 padding, 再套一层框就看着像两张卡, 所以 .navc 只留 margin。
+   原来的 .navc-hd / .navc-t(它自带的小标题行)随合并删掉: 视图按钮本身就是标题。 */
+.navc{margin:0}
+.navc-seg{display:inline-flex;gap:6px;margin-left:10px}
+.navc-seg .btn-tab{padding:3px 11px;font-size:12px;font-weight:600}
+.navc-sub{font-size:11px;color:var(--os-muted)}
+.navc-tag{font-size:11px;padding:2px 8px;border-radius:var(--r-pill);border:1px solid var(--os-border);color:var(--os-muted)}
+.navc-tag.ok{color:var(--up);border-color:rgba(255,82,104,.45)}      /* 正常 = 好 → 红(轴①) */
+.navc-tag.warn{color:var(--warn);border-color:rgba(245,158,11,.5)}
+.navc-tag.fail{color:var(--down);border-color:rgba(31,214,163,.55);background:rgba(31,214,163,.08)}   /* 触发失败条件 = 坏 → 绿 */
+.navc-warn{margin-top:8px;padding:7px 9px;border-radius:var(--r-ctl);font-size:12px;line-height:1.6;
+           background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);color:var(--os-text)}
+.navc-warn.fail{background:rgba(31,214,163,.1);border-color:rgba(31,214,163,.4)}
+.navc-main{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.navc-chart{flex:1 1 420px;min-width:280px;height:190px}
+.navc-chart canvas{display:block;width:100%;height:100%}
+.navc-kpi{display:flex;gap:16px;flex-wrap:wrap}
+.navc-kpi .k{font-size:10px;color:var(--os-muted)}
+.navc-kpi .v{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.navc-kpi .v.up{color:var(--up)}
+.navc-kpi .v.down{color:var(--down)}
+.navc-foot{margin-top:8px;font-size:11px;line-height:1.7;color:var(--os-muted)}
+.navc-rules{margin-top:9px;padding-top:9px;border-top:1px dashed var(--os-border);
+            display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px}
+.navc-rules input[type=number]{width:70px;text-align:center;margin:0 3px}
+
+/* ===== 窄屏收口(2026-09-29 美化收尾): 修掉两处真实的横向溢出 =====
+   ① 宏观 · 估值温度双仪表板: .vg 写死 186px, 两只并排 384px —— 390 视口下把整页撑出
+      32px 横滚(实测 scrollWidth 422 / clientWidth 390)。窄屏改成**按比例分宽**: 两只各吃
+      一半可用宽度, 不再写死。仪表是 SVG(width:100%), 收到 170px 刻度一样读得清。
+      ⚠️ 只收 560px 以下 —— 768 那条断点上 .val-gauges 已经占满整行, 两只仪表变宽反而更舒展,
+      没必要跟着改(缩小改动面)。
+   ② 卡片头在 560px 以下允许换行。「真实账户净值 · 收益归因」那一行是
+      「标题 + 副标 + 图章 + 视图切换(174px) + 立即记一条 + 失败条件」, 实测需要 443px ——
+      390/430 视口必然溢出(scrollWidth 443)。flex-wrap 只在**真放不下时**才换行,
+      放得下的卡头一个像素都不会动, 所以可以放心挂在全局 .card-header 上。 */
+@media (max-width:560px){
+  .val-gauges .vg-row{gap:10px}
+  .vg{flex:1 1 0;width:auto;min-width:0}
+  .card-header{flex-wrap:wrap;row-gap:6px}
+}
+
+/* ===== 寻找机会 · 港股打新 (2026-09-29 新增第 5 个子视图) =====
+   一条主线: 上面是**客观**(新股招股数据), 下面一排是**主观**(10 位大V的态度), 综合分把两者合成一个数。
+   颜色守轴①(红=好): 建议申购 → --up, 放弃/看淡 → --down, 分歧 → --warn; 未表态用虚线灰, 不抢眼。
+   ⛔ 别把"申购=绿"改成"申购=红"的反面 —— 全站都是 A 股口径, 这里刻意一致。 */
+.ipo-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 8px;min-height:16px}
+.ipo-list{display:flex;flex-direction:column;gap:10px}
+.ipo-empty{border:1px dashed var(--os-border);border-radius:var(--r-ctl);padding:26px 12px;
+  text-align:center;color:var(--os-muted);font-size:13px}
+.ipo-card{border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:10px 12px 11px;
+  background:linear-gradient(180deg,rgba(255,255,255,.012),rgba(255,255,255,0)),var(--os-surface-2);
+  box-shadow:0 1px 0 rgba(255,255,255,.02) inset}
+html.theme-light .ipo-card{background:#fff}
+.ipo-card.grey{opacity:.85}
+.ipo-head{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.ipo-head .nm{font-size:14px;font-weight:700;color:var(--os-text)}
+.ipo-head .cd{font-size:11px;color:var(--os-muted);font-variant-numeric:tabular-nums;letter-spacing:.3px}
+.ipo-head .ind,.ipo-head .tag{font-size:10px;padding:1px 6px;border-radius:var(--r-tag);
+  background:rgba(var(--accent-rgb),.14);color:var(--accent-on-tint);border:1px solid rgba(var(--accent-rgb),.32)}
+.ipo-head .tag{background:rgba(224,168,60,.14);color:var(--warn);border-color:rgba(224,168,60,.3)}
+.ipo-head .sp{flex:1 1 12px;min-width:6px}
+.ipo-head .src{font-size:10px;font-weight:700;padding:1px 6px;border-radius:var(--r-tag);
+  background:rgba(148,163,184,.16);color:var(--os-muted);cursor:help}
+.ipo-head .src.ai{background:rgba(var(--accent-rgb),.16);color:var(--accent-on-tint)}
+.ipo-head .sc{display:inline-flex;align-items:baseline;gap:4px;font-size:20px;font-weight:800;
+  font-variant-numeric:tabular-nums;line-height:1;color:var(--os-text);cursor:help}
+.ipo-head .sc i{font-style:normal;font-size:10px;font-weight:600;color:var(--os-muted)}
+.ipo-head .sc.pos{color:var(--up)}
+.ipo-head .sc.neg{color:var(--down)}
+.ipo-head .sc.mid{color:var(--warn)}
+.ipo-head .sc.na{color:var(--os-muted)}
+.ipo-meta{display:flex;flex-wrap:wrap;gap:4px 16px;margin:7px 0 8px;font-size:11px;color:var(--os-muted)}
+.ipo-meta span{display:inline-flex;align-items:baseline;gap:5px;white-space:nowrap}
+.ipo-meta i{font-style:normal;color:var(--os-muted)}
+.ipo-meta b{font-weight:700;color:var(--os-text);font-variant-numeric:tabular-nums}
+.ipo-votes{display:flex;flex-wrap:wrap;gap:6px}
+.ipo-v{display:inline-flex;align-items:baseline;gap:6px;border:1px solid var(--os-border);
+  background:var(--os-surface);border-radius:var(--r-ctl);padding:4px 9px;font-size:11px;
+  line-height:1.5;transition:border-color .15s,background .15s}
+html.theme-light .ipo-v{background:#fff}
+.ipo-v .n{color:var(--os-text);font-weight:600;white-space:nowrap}
+.ipo-v .s{font-weight:700;white-space:nowrap}
+.ipo-v.pos{border-color:color-mix(in srgb,var(--up) 45%,transparent);background:color-mix(in srgb,var(--up) 12%,transparent)}
+.ipo-v.pos .s{color:var(--up)}
+.ipo-v.neg{border-color:color-mix(in srgb,var(--down) 45%,transparent);background:color-mix(in srgb,var(--down) 11%,transparent)}
+.ipo-v.neg .s{color:var(--down)}
+.ipo-v.mid{border-color:rgba(224,168,60,.42);background:rgba(224,168,60,.1)}
+.ipo-v.mid .s{color:var(--warn)}
+.ipo-v.none{border-style:dashed;opacity:.62}
+.ipo-v.none .s{color:var(--os-muted)}
+/* 提及(只是提到了这只股, 没表态): 与「观望」分开 —— 观望是一种态度, 他并没有表示。
+   实线 + 主题色 = "有原文可展开", 一眼区别于右边那些没数据的虚线行。 */
+.ipo-v.men .s{color:var(--accent)}
+.ipo-v.men:hover{border-color:var(--accent)}
+/* 未取到 / 未同步: 这一轮**压根没读到**他的发言 —— 比「未提及」(读到了, 确实没写) 更淡 + 点线,
+   一眼分得出"没数据"和"大V不说话"。混成一个词等于替大V凭空表态。 */
+.ipo-v.none.stale{border-style:dotted;opacity:.45}
+/* 早停更 / 从没取到过的号(后端 _hk_v_live 判的 level=dead/none): 再压一档,
+   让"还会说话的"和"早就不说话的"一眼分得开。放在 .stale 之后 —— 两者会同时命中
+   (「未同步」的号往往也没数据), 谁的规则在后谁说了算。 */
+.ipo-v.stop{opacity:.4}
+/* 名册体检条(2026-09-30, 见 app.js ipoVsLiveHtml): 一行说清哪几位还在写、哪几位早停了。
+   没这行的时候, 面板上十枚「未提及」并排躺着, 看着就像这块界面坏了。
+   ⚠️ 点的颜色**不是**涨跌色(全站涨=红/跌=绿): 蓝=在写 / 黄=停了一阵 / 灰=早停了 —— 这是状态。 */
+.ipo-vsbar{display:flex;flex-wrap:wrap;align-items:center;gap:5px 7px;font-size:11px;
+  color:var(--os-muted);line-height:1.5}
+.ipo-vsbar .sum{color:var(--os-text);font-weight:700;font-variant-numeric:tabular-nums;cursor:help}
+.ipo-vsbar .v{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--os-border);
+  border-radius:var(--r-tag);padding:1px 6px;background:var(--os-surface);cursor:help;max-width:170px}
+html.theme-light .ipo-vsbar .v{background:#fff}
+.ipo-vsbar .v .dot{width:6px;height:6px;border-radius:var(--r-full);flex:0 0 auto;background:var(--os-muted)}
+.ipo-vsbar .v .nm{color:var(--os-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ipo-vsbar .v .dt{font-size:10px;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--os-muted)}
+.ipo-vsbar .v.ok .dot{background:var(--accent)}
+.ipo-vsbar .v.warn .dot{background:var(--warn)}
+.ipo-vsbar .v.warn .dt{color:var(--warn)}
+.ipo-vsbar .v.dead{opacity:.72}
+.ipo-vsbar .v.dead .dot{background:var(--os-muted)}
+.ipo-vsbar .v.none{opacity:.6;border-style:dashed}
+.ipo-vsbar .v.none .dot{background:transparent;box-shadow:0 0 0 1px var(--os-muted) inset}
+@media (max-width:560px){.ipo-vsbar .v .nm{max-width:92px}}
+.ipo-v[data-ex]{cursor:pointer}
+.ipo-v[data-ex]:hover{border-color:var(--accent)}
+.ipo-v.on{box-shadow:0 0 0 1px var(--accent) inset}
+.ipo-ex{margin-top:8px;padding:7px 9px;border-left:2px solid var(--accent);
+  border-radius:0 var(--r-ctl) var(--r-ctl) 0;background:rgba(var(--accent-rgb),.07);
+  font-size:12px;line-height:1.7;color:var(--os-text);word-break:break-word}
+@media (max-width:560px){.ipo-head .sc{font-size:17px}.ipo-meta{gap:3px 12px}}
+
+/* ---------- 港股打新 · 评分 × 暗盘涨跌幅(2026-09-30) ----------
+   大V综合分是**预测**, 暗盘涨跌幅是**结果** —— 同一张卡、同一张表里把两者摆在一起, 才看得出这套
+   评分有没有用(见 dash_core/hk_ipo_perf.py)。颜色照全站口径: 涨=红 / 跌=绿, 别"修正"。 */
+.ipo-meta .ipo-grey-chip{cursor:help}
+.ipo-pct{font-variant-numeric:tabular-nums}
+.ipo-pct.pos{color:var(--up)}
+.ipo-pct.neg{color:var(--down)}
+.ipo-pct.mid{color:var(--warn)}
+.ipo-pct.na{color:var(--os-muted)}
+.ipo-wait{color:var(--warn);font-weight:700}
+.ipo-rel{margin-top:12px;border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:10px 12px 11px;
+  background:linear-gradient(180deg,rgba(255,255,255,.012),rgba(255,255,255,0)),var(--os-surface-2)}
+html.theme-light .ipo-rel{background:#fff}
+.ipo-rel-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--os-text)}
+.ipo-rel-h .sp{flex:1 1 12px;min-width:6px}
+.ipo-rel-n{font-size:11px;color:var(--os-muted)}
+.ipo-rel-n b{color:var(--os-text);font-variant-numeric:tabular-nums}
+.ipo-rel-r{font-size:12px;font-weight:800;color:var(--accent-on-tint);font-variant-numeric:tabular-nums;cursor:help}
+.ipo-rel-r.na{font-weight:600;color:var(--os-muted)}
+.ipo-rel-bk{display:flex;flex-wrap:wrap;gap:4px 16px;margin:7px 0 2px;font-size:11px;color:var(--os-muted)}
+.ipo-rel-bk span{display:inline-flex;align-items:baseline;gap:5px;white-space:nowrap}
+.ipo-rel-bk i{font-style:normal}
+.ipo-rel-bk b{color:var(--os-text);font-weight:700}
+.ipo-rel-scroll{margin-top:6px;overflow-x:auto}
+.ipo-rel-table{width:100%;border-collapse:collapse;font-size:11px}
+.ipo-rel-table th,.ipo-rel-table td{padding:4px 10px 4px 0;text-align:right;white-space:nowrap;
+  border-bottom:1px solid var(--os-border)}
+.ipo-rel-table th:first-child,.ipo-rel-table td:first-child{text-align:left}
+.ipo-rel-table th{font-weight:600;color:var(--os-muted)}
+.ipo-rel-table td{color:var(--os-text)}
+.ipo-rel-table td.nm{font-weight:600}
+.ipo-rel-table .cc{color:var(--os-muted);font-variant-numeric:tabular-nums}
+.ipo-rel-table td.nm .cc{margin-left:5px;font-size:10px}
+.ipo-rel-table tr:last-child td{border-bottom:0}
+.ipo-rel-tag{display:inline-block;font-size:9px;line-height:1.5;padding:0 4px;border-radius:var(--r-tag);
+  border:1px solid var(--os-border);color:var(--os-muted);cursor:help}
+.ipo-rel-empty{margin-top:7px;font-size:11px;line-height:1.7;color:var(--os-muted)}
+.ipo-rel-tip{margin-top:6px;font-size:10px;line-height:1.6;color:var(--os-muted)}
+@media (max-width:560px){.ipo-rel{padding:9px 10px 10px}.ipo-rel-table{font-size:10px}}
+
+/* ===== 「投资框架」页第二张卡 · 投资日记 (2026-09-29 用户口径: "每天上来记录自己的投资想法") =====
+   交互形态抄 GitHub 上那个离线单文件日记 wxk66/private-diary: 左边**按天分组**的列表, 右边一块编辑区,
+   窄屏(≤820px)上下堆叠。它那套 PWA/隐私锁/提醒/图表没有抄 —— 这页只要"记得下来、翻得回去"。
+   颜色守全站口径: 心态与标签只吃中性 token + accent, **不许碰 --up/--down** —— 那是行情涨跌与
+   判断好坏的专用轴, 借来标"心情"会让整页的红绿失去意义; 破坏性动作(删除)沿用 btn-outline-danger 的红。 */
+/* 卡头: 左边两个「面」的切换按钮(复用「寻找机会」那套 .opp-tabs), 右边跟当前面对应的动作按钮。
+   整组能换行 —— 与 #tab-opp 同口径(动作按钮多, 窄屏必须让它掉到第二行, 否则顶出屏幕)。 */
+#tab-frame .card-header{flex-wrap:wrap;row-gap:4px}
+#tab-frame .frame-tabs{margin-left:0}
+.dy-wrap{display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr);gap:12px;align-items:start}
+.dy-side{display:flex;flex-direction:column;gap:8px;min-width:0}
+.dy-search{width:100%;font-size:12px;background:var(--os-surface);border:1px solid var(--os-border);
+  border-radius:var(--r-ctl);padding:6px 9px;color:var(--os-text)}
+.dy-search:focus{outline:none;border-color:var(--accent)}
+/* 手动顺序那行提示(2026-10-01 用户口径「日志系统，调整一下可以拖动改变排列顺序」):
+   平时就一行小字说"能拖", 排过之后右边才冒出「↺ 按时间」 —— 没排过时它不出现, 免得白占一格。 */
+.dy-sortbar{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--os-muted)}
+.dy-sortbar-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dy-sortbar-x{flex:0 0 auto;font-size:10.5px;line-height:1;padding:3px 7px;background:var(--os-surface);
+  border:1px solid var(--os-border);border-radius:var(--r-ctl);color:var(--os-muted);cursor:pointer}
+.dy-sortbar-x:hover{background:rgba(148,163,184,.16);color:var(--os-text)}
+/* 年 / 月视图(2026-09-30): 两个原生下拉并排 —— 日记是按天的流水, 要的是"翻到某个月",
+   所以不给日历控件。描边/圆角/字号与上面那个搜索框同一套 token, 免得两条控件像两个系统。
+   月下拉在「全部年份」时 disabled(月必须落在某一年里) —— 灰掉比让它选了个没用的值诚实。 */
+.dy-ym{display:flex;gap:6px}
+.dy-ym-sel{flex:1 1 0;min-width:0;font-size:12px;background:var(--os-surface);
+  border:1px solid var(--os-border);border-radius:var(--r-ctl);padding:6px 8px;color:var(--os-text)}
+.dy-ym-sel:focus{outline:none;border-color:var(--accent)}
+.dy-ym-sel:disabled{opacity:.55}
+/* 分类 / 子类(2026-09-30, 只用在「思考」栏): 与年/月那两个下拉共用 .dy-ym / .dy-ym-sel 的壳 ——
+   两个控件像两个系统是上一轮已经踩过的坑。行里那枚 ✕ 只在选中了某个分类时才出现(没选中就没有可删的)。 */
+.dy-cat-x{flex:0 0 auto;width:26px;font-size:12px;line-height:1;background:var(--os-surface);
+  border:1px solid var(--os-border);border-radius:var(--r-ctl);color:var(--os-muted);cursor:pointer}
+.dy-cat-x:hover{background:rgba(148,163,184,.16);color:var(--os-text)}
+.dy-catpick{display:flex;gap:6px;margin:0 0 6px}
+.dy-list{display:flex;flex-direction:column;gap:4px;max-height:520px;overflow:auto;
+  padding-right:2px;border-right:1px solid var(--os-border)}
+.dy-loading{font-size:12px;padding:14px 2px}
+.dy-daysep{display:flex;align-items:center;gap:8px;padding:6px 8px 2px;font-size:11px;font-weight:700;
+  color:var(--os-muted);letter-spacing:.2px;white-space:nowrap}
+.dy-daysep::after{content:"";flex:1 1 auto;height:1px;background:var(--os-border)}
+.dy-item{all:unset;cursor:pointer;display:flex;flex-direction:row;align-items:flex-start;gap:6px;
+  padding:7px 9px 7px 4px;min-width:0;
+  border:1px solid transparent;border-radius:var(--r-ctl);background:transparent;
+  transition:border-color .15s,background .15s;
+  /* ⚠️ 这一条**必须有**, 不是保险: 上面那句 `all:unset` 会把浏览器给 `[draggable=true]` 的默认
+     样式一起重置掉 —— 元素头上还挂着 draggable="true", 计算值却退回 `-webkit-user-drag:auto`,
+     于是 Chromium 压根不起拖(实测: 属性一个不缺, 就是拖不动, 而且没有任何报错)。
+     投资地图那张 .fr-card 没有 all:unset, 所以它一直好使 —— 照它抄的时候容易漏掉这一条。 */
+  -webkit-user-drag:element}
+.dy-item:hover{background:var(--os-surface-2);border-color:var(--os-border)}
+/* 整行可拖(见 app.js 里那几行 draggable)，左边这枚 ⠿ 只是"这里能拖"的提示; 点它不做事。
+   ⛔ 行内不许再塞可编辑控件 —— 整行 draggable 会把它们的默认行为抢掉(现在行内只有只读文字)。 */
+.dy-grip{flex:0 0 auto;width:11px;font-size:10px;line-height:1.5;text-align:center;color:var(--os-muted);
+  opacity:.45;cursor:grab;user-select:none}
+.dy-item:hover .dy-grip{opacity:1}
+.dy-item-bd{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 auto}
+.dy-item.dragging{opacity:.45}
+/* 落点线: 拖到目标行的上半 = "排到它前面", 下半 = "排到它后面"(由 app.js 的 dyPaintDrop 加 class)。
+   用 box-shadow 画这条线而不是 border: border 会撑动布局, 拖过每一行时整个列表都会跳一下。 */
+.dy-item.drop-b{box-shadow:0 -2px 0 0 var(--accent)}
+.dy-item.drop-a{box-shadow:0 2px 0 0 var(--accent)}
+.dy-item.on{border-color:var(--accent);background:rgba(var(--accent-rgb),.10)}
+.dy-item-hd{display:flex;align-items:baseline;gap:6px;min-width:0}
+.dy-mood{font-size:12px;line-height:1;flex:none}
+.dy-item-t{flex:1 1 auto;min-width:0;font-size:12.5px;font-weight:700;color:var(--os-text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dy-item-s{font-size:11px;line-height:1.5;color:var(--os-muted);overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.dy-item-ft{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:10px;color:var(--os-muted)}
+.dy-item-tm{font-variant-numeric:tabular-nums}
+.dy-tag{font-style:normal;font-size:10px;line-height:15px;padding:0 5px;border-radius:var(--r-tag);
+  border:1px solid rgba(var(--accent-rgb),.32);background:rgba(var(--accent-rgb),.10);color:var(--accent-on-tint)}
+.dy-main{min-width:0}
+.dy-empty{font-size:12.5px;line-height:1.9;color:var(--os-muted);border:1px dashed var(--os-border);
+  border-radius:var(--r-ctl);padding:26px 14px;text-align:center}
+.dy-empty code{font-size:11px;color:var(--os-text)}
+.dy-empty-tip{font-size:11px}
+.dy-editor{display:flex;flex-direction:column;gap:8px}
+.dy-ehead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.dy-eday{font-size:12px;font-weight:700;color:var(--os-text)}
+.dy-ehint{font-size:11px;color:var(--warn)}
+.dy-in{width:100%;font-size:13px;background:var(--os-surface);border:1px solid var(--os-border);
+  border-radius:var(--r-ctl);padding:7px 10px;color:var(--os-text)}
+.dy-in:focus{outline:none;border-color:var(--accent)}
+/* 标题格 + 正文格: 2026-10-01 用户口径「那个日志跟思考的输入框, 你搞那么小干嘛」——
+   日记的正文本来就是这一屏的主角, 该把剩下的屏占掉; 标题跟着放大一档, 否则和正文差半行,
+   看着不像同一个框里的东西。⛔ 文件末尾那节「控件高度四档制」只管按钮, 不会覆盖这里的 padding。 */
+.dy-in-title{font-size:16px;font-weight:700;padding:10px 12px;min-height:44px}
+.dy-emeta{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:center}
+/* 卡头那排「日志 / 思考」两栏切换: 与「寻找机会」的 .opp-tabs 同一套按钮, 只是更小一号。
+   排在计数左边 —— 先选栏, 再看这一栏的篇数, 视线顺序就是这个顺序。 */
+.dy-tabs{margin-left:0;gap:2px}
+.dy-tabs .btn-tab{padding:3px 9px;font-size:11px}
+/* 编辑区那排「记到哪一栏」已删(2026-10-02) —— #diaryParts 与 .dy-parts 都不在了。 */
+.dy-moods{display:flex;flex-wrap:wrap;gap:4px}
+.dy-moodbtn{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:11px;
+  padding:3px 8px;border:1px solid var(--os-border);border-radius:var(--r-pill);
+  background:var(--os-surface);color:var(--os-muted);transition:border-color .15s,color .15s}
+.dy-moodbtn b{font-weight:600}
+.dy-moodbtn:hover{border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--os-text)}
+.dy-moodbtn.on{border-color:var(--accent);color:var(--accent);background:rgba(var(--accent-rgb),.12)}
+.dy-mood-i{font-size:12px;line-height:1}
+/* 正文档位: 52vh(封顶 900 / 兜底 360) —— 笔记本上一屏刚好写完一段不用滚, 大屏上也不会无限拉长。
+   resize:vertical 留着: 想再高一点自己拖右下角。 */
+.dy-in-text{resize:vertical;font-size:14px;line-height:1.8;font-family:inherit;
+  min-height:clamp(360px,52vh,900px)}
+.dy-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.dy-acts-sp{flex:1 1 auto}
+.dy-undo{display:flex;align-items:center;gap:10px;margin-top:10px;padding:7px 10px;
+  border:1px dashed rgba(224,168,60,.45);border-radius:var(--r-ctl);background:rgba(224,168,60,.08);
+  font-size:12px;color:var(--os-text)}
+.dy-undo-t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html.theme-light .dy-item:hover{background:rgba(15,23,42,.03)}
+@media (max-width:820px){
+  .dy-wrap{grid-template-columns:minmax(0,1fr)}
+  .dy-list{max-height:280px;border-right:0;border-bottom:1px solid var(--os-border);padding-bottom:6px}
+  .dy-emeta{grid-template-columns:minmax(0,1fr)}
+}
+
+/* ===== 控件高度四档制 ===== (放文件末尾: 必须在所有原始定义之后, 否则被后面的 padding 覆盖) */
+/* ===== 控件高度四档制(2026-09-30) =====
+   圆角统一之后还是"看着不齐" —— 因为实测有 44/36/33/32/29/28/27/24/20/18 十个高度。
+   眼睛先读尺寸节奏, 再读圆角。这里把**所有可点元素**压到四档, 步进 4px:
+     L  40  主 CTA   .btn-primary
+     M  32  次级/独立动作  .btn 默认、.btn-outline-* 、.hv-toggle、.btn-add-watch、.qt-pg-btn
+     S  28  分段控件  .btn-tab、.tab、.v-chip、.qt-tab、.fr-btn
+     XS 24  密表行内  .btn-sm 系列、.adv-aibtn、.xqprog-fold
+   图标按钮另走 36(--ctl-icon), 关闭类 28(--ctl-close)。
+   ⚠️ 用 min-height + padding 而**不用 height**: 中文行高比拉丁字母高, 写死 height 会让字贴边。 */
+.btn{min-height:var(--ctl-m);padding:5px 14px;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  font-size:var(--fs-13);line-height:1.4}
+.btn.btn-sm{min-height:var(--ctl-xs);padding:2px 10px;font-size:var(--fs-12);line-height:1.4}
+/* .btn-sm 带主色时不要跳回 L 档: 密表里的主色微按钮应保持 XS, 否则同色同形却忽大忽小 */
+.btn.btn-sm.btn-primary{min-height:var(--ctl-xs);padding-left:12px;padding-right:12px}
+.btn.btn-sm.btn-outline-primary,.btn.btn-sm.btn-outline-secondary,.btn.btn-sm.btn-outline-danger{min-height:var(--ctl-xs)}
+/* 分段控件 S 档: 成组出现, 必须比独立动作小一号, 否则一屏上全是同高的胶囊, 读不出层级 */
+.btn-tab{min-height:var(--ctl-s);padding:4px 13px;display:inline-flex;align-items:center;justify-content:center;
+  font-size:var(--fs-12);line-height:1.4}
+.dt-kline-tabs .btn-tab{min-height:var(--ctl-s);padding:4px 12px}
+.top-tabs .tab{min-height:var(--ctl-s);padding:4px 14px;box-sizing:border-box;line-height:1.4}
+.v-chip{min-height:var(--ctl-s);height:var(--ctl-s);padding:0 13px;box-sizing:border-box;line-height:1}
+.qt-tab{min-height:var(--ctl-s);padding:4px 14px}
+.hv-toggle{min-height:var(--ctl-s);padding:4px 14px}
+.qt-pg-btn{min-height:var(--ctl-xs);padding:3px 12px}
+.btn-add-watch{min-height:var(--ctl-xs);padding:3px 12px}
+.fr-btn{min-height:var(--ctl-xs);padding:3px 9px}
+/* 图标按钮: 只有图标 → 正圆, 统一 36(--ctl-icon) */
+.btn-icon{width:var(--ctl-icon);height:var(--ctl-icon);min-height:0;padding:0}
+/* 关闭类: 统一 28(--ctl-close) 正圆 */
+.btn-close,.qmodal-x{width:var(--ctl-close);height:var(--ctl-close);min-height:0;padding:0}
+.xqprog-num{flex:none;color:var(--os-muted);font-variant-numeric:tabular-nums}
+.xqprog-num b{color:var(--os-text)}
+/* 雪球冷却期(2026-09-30): 抓取失败过一次之后, 一段时间内任何入口都不许再开窗口。
+   这不是"报错", 是"我们主动不动手", 所以用中性偏冷的蓝色, 不用红。 */
+.xqprog-cool{flex:none;padding:1px 8px;border-radius:var(--r-pill);font-size:12px;
+  color:#0e7490;background:rgba(14,116,144,.10);border:1px solid rgba(14,116,144,.28)}
+html.theme-light .xqprog-cool{color:#0e7490;background:rgba(14,116,144,.08)}
+
+/* ============================================================================
+   红利低波打分 (2026-10-02 用户口径): 「投资框架」页第三面。
+   他(雪球「红利低波投资第一人」)的 0-10 分制 —— 0 = 最便宜, 10 = 最贵。
+   三档 便宜/合理/偏贵 走全站语义色(涨=红=好 / 主色蓝 / 琥珀), 不另造一套。
+   卡片底色/描边全用 :root 的令牌, 所以日夜两套主题都不用再写第二份。
+   ============================================================================ */
+.hd-wrap{display:flex;flex-direction:column;gap:10px}
+.hd-legend{display:flex;align-items:center;flex-wrap:wrap;gap:2px 5px;font-size:11.5px;color:var(--os-muted)}
+.hd-legend .hd-z-0,.hd-legend .hd-z-1,.hd-legend .hd-z-2{font-size:10px;margin-left:6px}
+.hd-legend-sub{color:var(--os-muted);opacity:.8}
+.hd-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.hd-card{background:var(--os-surface-2);border:1px solid var(--os-border);border-radius:14px;
+  padding:12px 14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.hd-card-hd{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.hd-name{font-size:15px;font-weight:600;color:var(--os-text)}
+.hd-code{font-size:11px;color:var(--os-muted);font-variant-numeric:tabular-nums}
+.hd-etf{font-size:11px;color:var(--os-muted);line-height:1.35}
+.hd-score-row{display:flex;align-items:center;gap:10px}
+.hd-score{font-size:34px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.hd-score-r{display:flex;flex-direction:column;gap:3px;min-width:0}
+.hd-zone{font-size:11px;padding:1px 8px;border-radius:999px;border:1px solid currentColor;
+  white-space:nowrap;align-self:flex-start}
+.hd-scale{font-size:10.5px;color:var(--os-muted);white-space:nowrap}
+.hd-z-0{color:var(--up)}      /* 便宜 */
+.hd-z-1{color:var(--accent)} /* 合理 */
+.hd-z-2{color:var(--warn)}   /* 偏贵 */
+.hd-parts{display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--os-line);padding-top:8px}
+.hd-part{display:grid;grid-template-columns:32px 32px minmax(0,1fr) 34px;align-items:center;gap:6px;
+  font-size:11.5px;color:var(--os-muted)}
+.hd-part-k{color:var(--os-text);opacity:.85;white-space:nowrap}
+.hd-part-w{font-size:10.5px;text-align:right;font-variant-numeric:tabular-nums}
+.hd-part-bar{height:6px;border-radius:999px;background:var(--os-surface);overflow:hidden}
+.hd-part-bar>i{display:block;height:100%;border-radius:999px;background:var(--accent);opacity:.85}
+.hd-part-v{text-align:right;font-variant-numeric:tabular-nums;color:var(--os-text)}
+.hd-nums{display:flex;flex-wrap:wrap;gap:3px 10px;font-size:11px;color:var(--os-muted);
+  border-top:1px solid var(--os-line);padding-top:8px}
+.hd-nums b{color:var(--os-text);font-weight:600;font-variant-numeric:tabular-nums}
+.hd-cal{font-size:11.5px;color:var(--os-muted)}
+.hd-cal b{color:var(--os-text);font-variant-numeric:tabular-nums}
+.hd-hist{display:flex;flex-direction:column;gap:3px;margin-top:2px}
+.hd-hist-t{font-size:10.5px;color:var(--os-muted);line-height:1.45}
+.hd-spark{width:100%;height:34px;display:block}
+.hd-spark polyline{fill:none;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
+.hd-spark-m{stroke:var(--accent)}
+.hd-spark-h{stroke:var(--warn);stroke-dasharray:3 3;opacity:.9}
+.hd-loading{font-size:12.5px;line-height:1.7;padding:10px 2px}
+/* .hd-foot / .hd-foot b 随「红利低波」页面底下那三段说明一起删(2026-10-02 用户口径: "这些说明能删就删掉") */
+.hd-tilt{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--os-muted)}
+.hd-range{width:110px;accent-color:var(--accent);vertical-align:middle}
+.hd-tilt-val{color:var(--os-text);font-variant-numeric:tabular-nums;min-width:32px;text-align:right}
+@media (max-width:1180px){ .hd-cards{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (max-width:820px){ .hd-cards{grid-template-columns:1fr} }
+
+/* ============================================================================
+   月度宏观 · CPI/PPI/失业率/PMI (2026-10-02 用户口径: "弄成中美对比的表格这样好看很多")。
+   形态: **一行一个口径, 左中国右美国并排** → 7 列 = 指标 + 中国(最新/上期/截止) + 美国(最新/上期/截止)。
+   病根回顾: 原来是"一行一个读数"的七列宽表, 长文本列(指标/来源/备注)互相挤 → 「指标」被折成两行
+   (用户: "排版这么呆, 好多莫名其妙的换行")。治法:
+     ① 结构上不留长文本列 —— 口径备注与来源收进每格的 title(见 app.js 的 mfTitle/mfCells);
+     ② 全表 nowrap + tabular-nums: 数字按位对齐、永不折行;
+     ③ 列宽交给 table-layout:auto 按内容定, 不留空荡荡的宽列。
+   ⛔ 只动排版, 不动数据口径; 也不动 MACRO_FUND_RECS 的形状(框架页按 "mf_"+key 读它)。
+   ============================================================================ */
+#macroFundTable{table-layout:auto;width:100%}
+#macroFundTable th,#macroFundTable td{padding:3px 10px;vertical-align:middle;line-height:1.5;white-space:nowrap}
+#macroFundTable thead th{font-size:11.5px;color:var(--os-muted);font-weight:600}
+#macroFundTable td{font-size:12.5px;border-color:var(--os-line)}
+/* 「指标」列: 唯一的长文本列, 让它自己撑到内容宽(不再是百分比定宽, 所以 7 个字的「制造业 PMI」也不会被截) */
+#macroFundTable .mf-label{width:20%;font-size:12.5px;color:var(--os-text);border-right:1px solid var(--os-line)}
+#macroFundTable thead th.mf-label{text-align:left}
+/* 中国 / 美国 两组: 组头跨 3 列, 两组之间一条竖线分开(mf-usl = 美国那组的首格) */
+/* 指标 20% + 两组各 40%: 不给宽度时浏览器按**内容**分, 中国的「4014.4亿美元」比美国的「3.4%」长得多
+   ⇒ 中国那组被撑宽、美国那组被压窄, 一条竖线看着是歪的; 给两组同一个百分比才对称。 */
+#macroFundTable .mf-grp{width:40%;text-align:center;letter-spacing:1px}
+#macroFundTable .mf-usl{border-left:1px solid var(--os-line)}
+#macroFundTable .mf-num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;color:var(--os-text)}
+/* 上期整列压暗: 一眼就能分清"这期"和"上期", 不用去读表头 */
+#macroFundTable .mf-prev{font-weight:400;color:var(--os-muted)}
+#macroFundTable td.mf-date{font-size:11px;color:var(--os-muted);text-align:right;font-variant-numeric:tabular-nums}
+#macroFundTable .mf-unit{font-size:10px;font-weight:400;color:var(--os-muted);margin-left:1px}
+/* ▲▼ 只表示"比上期高/低", 一律灰字 —— 颜色只留给「红绿灯」那一套体系(用户 2026-09-27 口径) */
+#macroFundTable .mf-dir{font-size:9px;color:var(--os-muted);opacity:.7;margin-left:3px;vertical-align:1px}
+#macroFundTable .mf-nil,#macroFundTable .mf-na{color:var(--os-muted)}
+#macroFundTable .mf-na{font-weight:400;opacity:.45}
+/* 「中国海关 · 无美国同口径」那一段的分隔行(它自己不占数据列) */
+#macroFundTable .mf-sep td{font-size:11px;color:var(--os-muted);letter-spacing:.5px;
+  padding-top:9px;padding-bottom:4px}
+/* 「已拉取 11 项 · 预览(未保存)」这种状态字以前没有宽度上限, 一长就把右侧按钮挤到第二行 */
+#macroAiStamp{display:inline-block;max-width:260px;vertical-align:middle}
+
+/* ============================================================================
+   投资日记 · 正文黄底高亮 (2026-10-02 用户口径: "日志里面增加黄底高亮功能")
+   记号写在正文里: ==要画黄底的话== -- 正文本身仍是纯文本, 只在渲染时画黄底。
+   黄底沿用全站那支暖色(与 .mm-mark 那类琥珀小标同一色系), 夜里/日间各一档, 不另造一套色。
+   .dy-hl 会出现在三处: 列表摘要、编辑区「本篇重点」的小牌、以后任何渲染正文的地方。
+   ============================================================================ */
+.dy-hl{background:color-mix(in srgb,#fcd34d 30%,transparent);color:#ffe9a8;
+  border-radius:3px;padding:0 2px;
+  -webkit-box-decoration-break:clone;box-decoration-break:clone}
+html.theme-light .dy-hl{background:color-mix(in srgb,#f7d54a 55%,transparent);color:#3a2a00}
+/* 选中文字 -> 选区上方弹出的小条(2026-10-02 用户口径: "选取文字后会弹出这个高亮的选项" /
+   "本篇重点, 点击索引这样的功能也是不需要的哈")。底下那个 🖍 按钮与「本篇重点」索引一并撤掉。
+   注意 .dy-selbar[hidden] 那条: 不写的话 display:flex 会盖掉 hidden 属性。 */
+.dy-selbar{position:fixed;z-index:2300;display:flex;align-items:center;gap:6px;padding:4px;
+  border:1px solid var(--os-border);border-radius:var(--r-ctl);background:var(--os-surface-2);
+  box-shadow:0 6px 20px rgba(0,0,0,.35)}
+.dy-selbar[hidden]{display:none}
+.dy-selbtn{border:0;background:none;color:var(--os-text);font-size:12px;line-height:20px;
+  padding:2px 8px;border-radius:var(--r-ctl);cursor:pointer;white-space:nowrap}
+.dy-selbtn:hover{background:color-mix(in srgb,#fcd34d 22%,transparent)}
+/* 正文格子(2026-10-02 同日第二次改): 为了画黄底, <textarea> -> contenteditable。
+   下面几行是它的"壳", 对着 .dy-in-text 那条写, 保证换完还是原来那块大格子 —— 别删 .dy-in-text。 */
+.dy-edit{display:block;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;overflow-y:auto}
+.dy-edit:empty::before,.dy-edit.is-ph::before{content:attr(data-ph);color:var(--os-muted);
+  white-space:pre-wrap;pointer-events:none}
+.dy-edit>mark.dy-hl{padding:0 1px}

@@ -1,0 +1,33 @@
+投资仪表盘 · 本地源码版
+========================================
+
+【使用入口】
+1. 已有环境的本机可直接双击“启动投资仪表盘.vbs”。
+   新电脑请先双击“安装依赖.bat”，只在本目录安装 Python 与依赖。
+2. 默认地址：http://127.0.0.1:5001/
+3. 手动查看日志：双击 scripts\windows\run.bat。
+   原 investment-dashboard\run.bat 也仍可使用。
+4. 停止本项目服务：双击“停止服务.bat”。
+
+【结构整理后的路径】
+app.py、dash_core、static、tests 已位于本目录根层。
+原 investment-dashboard\data 已整体迁移至 data，原报告迁移至“研报”。
+安装与停止实现位于 scripts\windows；原中文脚本保留为转发入口。
+.venv 与 .runtime 没有移动，不修改系统 Python、PATH 或注册表。
+
+【说明与验证】
+项目总说明：README.md
+架构与方法学习：docs\architecture.md
+结构调整记录：docs\repository-structure.md
+本次静态核对：docs\structure-validation.md
+手动运行验证：docs\manual-validation.md
+
+不自动编译、启动或重启业务程序，修改源码后请手动重启验证。
+日志现在位于本目录 log_launch.txt 和 server.log。
+配置仍在 data\settings.json 与 data\secrets.json，可在网页“设置”填写。
+迁移前文件指纹和入口备份：.runtime\structure-backup-20261009。
+
+【数据与环境】
+data、研报、浏览器会话和本地环境保留在本机，未来仓库会忽略这些文件。
+备份请保存 data 与研报；移动整个项目到其他位置后请停止服务并重建该副本的 .venv。
+具体操作与目录用途见 README.md。

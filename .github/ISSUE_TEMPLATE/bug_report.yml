@@ -1,0 +1,28 @@
+name: 问题反馈
+description: 记录页面、启动或数据读取问题
+title: "[问题] "
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 实际问题与预期行为
+      description: 写明页面或功能，以及出现了什么情况。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重现步骤
+      description: 写明手动操作顺序和所用入口。
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境与日志
+      description: 提供 Windows、Python、Edge 版本及必要日志片段；去掉密钥、Cookie 和账户信息。
+  - type: textarea
+    id: checks
+    attributes:
+      label: 已做的手动验证
+      description: 记录验证过的页面或脚本，未运行的内容注明未验证。

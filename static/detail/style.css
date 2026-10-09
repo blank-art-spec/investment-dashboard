@@ -1,0 +1,607 @@
+/* -*- coding: utf-8 -*- */
+/* 个股详情测试前端(5099) · Tabler 风格 · 5 子页面 */
+:root {
+  --bg: #f4f6fb; --card: #ffffff; --line: #e7ecf3;
+  --tx: #1c2430; --tx2: #5b616e; --tx3: #646b78;
+  --blue: #0052ff; --green: #0d7240; --orange: #965200; --red: #c0271e;
+  /* --soft = 卡片里再嵌一层的小底(说明块/象限 chip); --warn-bg = 橙条提醒底。
+     原来这两处是**写死的浅色字面值**(#fafcff / #fff9f1), 深色主题下就是一块白斑, 而淡字
+     (--tx2 深色主题下是浅灰)压在白底上直接看不见 —— 「预期差」那张卡整块中招(2026-09-25)。 */
+  --soft: #fafcff; --warn-bg: #fff9f1;
+  --shadow: 0 1px 2px rgba(20, 40, 80, .05), 0 4px 14px rgba(20, 40, 80, .04);
+  /* K线·大V圆点共用组件(static/votes_kline.css)的取色令牌: 结构只有一份, 颜色各页映射一次。
+     --vk-up/--vk-down 指向 --red/--green, 所以 html.theme-dark 那套一换这两支自动跟着换,
+     不需要在这里再为深色写一遍。 */
+  --vk-up: var(--red); --vk-down: var(--green);
+  --vk-tx: var(--tx); --vk-tx2: var(--tx2); --vk-tx3: var(--tx3);
+  --vk-soft: var(--soft);
+  --vk-pop-bg: var(--card); --vk-pop-line: var(--line); --vk-pop-shadow: var(--shadow);
+  --vk-pop-z: 10; --vk-pop-max-h: 260px;
+  --vk-rowline: var(--line);
+  /* 深蓝淡底(#1b2c46 那一档: 页签序号/影子对照章)上的蓝字 —— 直接用 --blue 只有 4.44:1,
+     小号粗体不够; 这里单独给一档更亮的字色, 与主面板 --accent-on-tint 同一层(2026-09-30 Coinbase)。 */
+  --on-tint-blue: var(--blue);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--tx);
+  font: 13px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.app { max-width: 1180px; margin: 0 auto; padding: 14px 18px 40px; }
+
+/* ---------- 顶栏 ---------- */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px 18px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 12px; box-shadow: var(--shadow);
+  position: sticky; top: 8px; z-index: 20;
+}
+.lhs { display: flex; align-items: center; gap: 14px; min-width: 0; }
+/* 返回面板(2026-09-22 并入主程序): 本页由主面板双击持仓行**新开**打开, 给一条回主面板的路 */
+.backlink {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 28px; height: 28px; border-radius: 9999px; text-decoration: none;
+  border: 1px solid var(--line); background: #fff; color: var(--tx2);
+  font-size: 15px; line-height: 1; transition: all .15s ease;
+}
+.backlink:hover { color: var(--blue); border-color: var(--blue); background: #f0f5fd; }
+/* 这块深色底原来写死"个股详情"四个字, 现在装的是**标的名称**(2026-09-24 用户口径) ——
+   它同时是本页的标题, 所以字号按标题给, 且 flex:none 防被右边的行情栏挤掉(名称不换行) */
+.logo {
+  flex: none; padding: 5px 12px; border-radius: 8px; font-weight: 700; font-size: 16px;
+  background: linear-gradient(135deg, #2c66b8, #4a8fe0); color: #fff; white-space: nowrap;
+}
+.title { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: .5px; }
+.title .sub { font-size: 12px; font-weight: 500; color: var(--tx3); margin-left: 6px; }
+.meta { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.ml-price, .ml-item { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
+.ml-k { font-size: 11px; color: var(--tx3); margin-bottom: 3px; }
+.ml-price b, .ml-item b { font-size: 15px; font-weight: 700; }
+.ml-price b { color: var(--green); font-size: 17px; }
+.score-chip-set { display: flex; gap: 6px; }
+.chip {
+  display: flex; align-items: center; gap: 5px; padding: 4px 9px;
+  background: #f0f4fa; border: 1px solid var(--line); border-radius: 8px; font-size: 12px;
+}
+.chip i { font-style: normal; font-weight: 700; color: var(--tx2); }
+.chip b { font-weight: 700; min-width: 30px; text-align: right; }
+.rbtn {
+  appearance: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 9999px;
+  background: #fff; color: var(--tx2); transition: all .15s ease;
+}
+.rbtn:hover { color: var(--blue); border-color: var(--blue); background: #f0f5fd; }
+.rbtn svg { width: 16px; height: 16px; }
+.rbtn.spinning svg { animation: spin .8s linear infinite; }
+
+/* ---------- 页签 ---------- */
+.tabs { display: flex; gap: 6px; margin: 14px 0 0; overflow-x: auto; overflow-y: hidden; }
+.tab {
+  appearance: none; border: 1px solid transparent; border-bottom: none; cursor: pointer;
+  padding: 4px 18px; min-height: 28px; display: inline-flex; align-items: center; border-radius: 9999px 9999px 0 0; background: transparent; box-sizing: border-box;
+  font-size: 13px; font-weight: 600; color: var(--tx2);
+  display: inline-flex; align-items: center; gap: 7px; transition: all .15s ease;
+}
+.tab .tnum {
+  font-size: 10px; font-weight: 700; color: var(--tx3); padding: 1px 5px;
+  background: #edf1f7; border-radius: 20px;
+}
+.tab:hover { color: var(--blue); background: #f0f5fd; }
+.tab.active {
+  background: var(--card); color: var(--blue); border-color: var(--line);
+  box-shadow: var(--shadow); position: relative;
+}
+.tab.active .tnum { background: #e3edfb; color: var(--blue); }
+.tab.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--card); }
+
+/* ---------- 主区 ---------- */
+.body { background: var(--card); border: 1px solid var(--line); border-top: none; border-radius: 0 12px 12px 12px; box-shadow: var(--shadow); padding: 20px 22px; }
+.pane { animation: fadein .2s ease; }
+@keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ---------- 加载动效 ---------- */
+.spin { display: inline-block; width: 12px; height: 12px; vertical-align: -2px; margin-right: 6px;
+  border: 2px solid #cdd7e3; border-top-color: var(--blue); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.pane-anim { animation: panein .22s ease; }
+@keyframes panein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.sk { position: relative; overflow: hidden; background: #eef1f5; border-radius: 6px; }
+.sk::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.7), transparent);
+  animation: shimmer 1.2s infinite; transform: translateX(-100%); }
+@keyframes shimmer { to { transform: translateX(100%); } }
+.sk-row { height: 20px; margin-bottom: 8px; }
+
+.scorehead { display: flex; align-items: baseline; gap: 12px; padding: 6px 0 14px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.scorehead.sm { margin-bottom: 10px; }
+.scorehead .big { font-size: 34px; font-weight: 800; min-width: 60px; }
+.scorehead .cap { font-size: 14px; font-weight: 700; color: var(--tx2); }
+.scorehead .cap b { color: var(--tx); padding: 1px 7px; background: #f0f4fa; border-radius: 6px; font-size: 13px; }
+.scorehead .note { font-size: 12px; color: var(--tx3); margin-left: auto; text-align: right; line-height: 1.5; }
+
+/* ---------- dims 评分明细 ---------- */
+.dims { display: flex; flex-direction: column; gap: 10px; }
+.dim { padding: 9px 12px; background: #fafcff; border: 1px solid var(--line); border-radius: 10px; }
+.dim-head { display: flex; align-items: center; gap: 10px; }
+.dim-head .dl { font-weight: 600; flex: 0 1 auto; }
+.dim-head .dw { font-size: 11px; color: var(--tx3); background: #f0f4fa; padding: 1px 7px; border-radius: 20px; }
+.dim-head .ds { font-size: 16px; font-weight: 700; margin-left: auto; min-width: 34px; text-align: right; }
+.bar { flex: 1; height: 7px; background: #eef1f6; border-radius: 6px; margin: 8px 0 6px; overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 6px; transition: width .3s ease; }
+.dr { font-size: 12px; color: var(--tx2); white-space: pre-wrap; word-break: break-word; }
+
+/* 左右半宽(split2) */
+.split2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.split2 .col { min-width: 0; }
+@media (max-width: 860px) { .split2 { grid-template-columns: 1fr; } }
+
+/* ---------- 近期舆情 ---------- */
+.toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.grp { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.gcap { font-size: 11px; font-weight: 700; color: var(--tx3); letter-spacing: .5px; }
+.grp label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--tx2); }
+.grp select, .grp input[type=number] {
+  border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font-size: 12px; color: var(--tx); background: #fff;
+}
+.grp input[type=number] { width: 72px; -moz-appearance: textfield; }
+.grp input[type=number]::-webkit-outer-spin-button,
+.grp input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.btn {
+  appearance: none; cursor: pointer; border-radius: 9999px; padding: 5px 14px; font-size: 12px; font-weight: 600; transition: all .15s ease; min-height: 32px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; line-height: 1.4;
+}
+.btn.primary { background: var(--blue); color: #fff; border: 1px solid var(--blue); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.primary:disabled { opacity: .5; cursor: default; filter: none; }
+.btn.ghost { background: #fff; color: var(--blue); border: 1px solid var(--line); }
+.btn.ghost:hover { background: #f0f5fd; }
+.status { font-size: 12px; color: var(--tx2); margin-left: auto; text-align: right; line-height: 1.5; }
+.status b { color: var(--tx); }
+
+/* 「④近期舆情」页签的样式 (sent-summary / scard / bars / brow / btrack / lg / dot / formula /
+   tag / why / pg / pbtn) 与「大V−小V 预期差」卡的样式 (vv- 前缀全部 + vk-tg) 已于 2026-09-25
+   随前端展示一起删除 —— 见 index.html 里那段说明。同日又撤了 ④量化回测 里的舆情入口, 连带删掉
+   深抓进度条 .deepbar / .deepbar-note(只有那段"舆情深抓中"用过它)。 */
+
+/* 表格里通用的小单元(①基本面的财务预测两张表在用) */
+.panel { margin-top: 14px; }
+.panel-h { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 700; padding: 8px 2px 8px; }
+.panel-h .hint { font-size: 12px; font-weight: 500; color: var(--tx3); }
+.scroll { max-height: 460px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead th { position: sticky; top: 0; background: #f4f7fc; text-align: left; padding: 8px 10px; font-weight: 700; color: var(--tx2); border-bottom: 1px solid var(--line); z-index: 2; }
+tbody td { padding: 8px 10px; border-bottom: 1px solid #f1f4f9; vertical-align: top; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: #f8fbff; }
+td.t, td.u { white-space: nowrap; color: var(--tx2); }
+
+/* ---------- 量化回测 ---------- */
+.bt-kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 6px; }
+@media (max-width: 860px) { .bt-kpis { grid-template-columns: repeat(3, 1fr); } }
+.kpi { background: #fafcff; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.kpi .k { font-size: 11px; color: var(--tx3); margin-bottom: 4px; }
+.kpi .v { font-size: 18px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.kpi .v.sm { font-size: 11px; font-weight: 500; color: var(--tx2); line-height: 1.5; }
+.kpi.note { grid-column: 1 / -1; }
+.kpi.note .v { text-align: left; }
+.chartbox canvas { width: 100%; height: auto; display: block; }
+.chartbox { border: 1px solid var(--line); border-radius: 10px; padding: 6px; }
+
+/* ---------- 通用 ---------- */
+.dot-src { color: var(--tx3); font-size: 11px; margin-left: 6px; }
+.warn { color: var(--orange); font-weight: 600; margin-left: 6px; }
+.ok { color: var(--green); font-weight: 600; margin-left: 6px; }
+.empty { color: var(--tx3); text-align: center; padding: 18px; }
+
+.panel-h .hint { margin-left: 10px; }
+
+/* ============================================================
+   深色主题(2026-09-22 并入主程序时加)
+   ------------------------------------------------------------
+   主面板默认**深色**(settings.json 的 theme, 缺省 "dark"), 而本页是独立文档、读不到它的 SETTINGS,
+   主题由打开链接上的 ?theme= 带过来(见 index.html <head> 那段首屏脚本 + static/app.js 的 openStockDetail)。
+   做法: 先换 :root 令牌(--bg/--card/--line/--tx/--各语义色), 再逐条覆盖本文件里**写死的浅色底** ——
+   它们当时是字面色不是变量, 不覆盖就会在深底上留一块块白斑。浅色(默认)一行都不用动。
+   canvas 里的颜色变量管不到(画布是画上去的), 那部分在 app.js 的 CH 里分主题, 不要在这里找。
+   ============================================================ */
+html.theme-dark {
+  --on-tint-blue: #8fb0ff;
+  --bg: #0f141b; --card: #161d27; --line: #26303d;
+  --tx: #f7f8f8; --tx2: #b6bcc5; --tx3: #a8acb3;
+  --blue: #5b8cff; --green: #2fb97e; --orange: #f4b000; --red: #ff5c62;
+  --soft: #18212d; --warn-bg: #2a2318;   /* 与下面 .dim / .fc-cav 用的同一档底 */
+  --shadow: 0 1px 2px rgba(0, 0, 0, .45), 0 4px 14px rgba(0, 0, 0, .35);
+  color-scheme: dark;          /* 让下拉框/滚动条/数字输入的浏览器原生部分也走深色 */
+}
+/* 白底控件 → 深一档的卡片色 */
+html.theme-dark .backlink,
+html.theme-dark .rbtn,
+html.theme-dark .btn.ghost,
+html.theme-dark .grp select,
+html.theme-dark .grp input[type=number] { background: #1d2734; border-color: var(--line); }
+html.theme-dark .backlink:hover,
+html.theme-dark .rbtn:hover,
+html.theme-dark .btn.ghost:hover { background: #223047; }
+/* 浅色小药丸/标签底 */
+html.theme-dark .chip,
+html.theme-dark .scorehead .cap b,
+html.theme-dark .dim-head .dw { background: #1e2937; }
+html.theme-dark .tab .tnum { background: #1e2937; }
+html.theme-dark .tab:hover { background: #1b2735; }
+html.theme-dark .tab.active .tnum { background: #1b2c46; color: var(--on-tint-blue); }
+/* 浅色卡片底 */
+html.theme-dark .dim,
+html.theme-dark .kpi { background: #18212d; }
+/* 浅色轨道底(进度条/评分条/热度条/标签) */
+html.theme-dark .bar { background: #223041; }
+/* 表格 */
+html.theme-dark thead th { background: #1b2431; }
+html.theme-dark tbody td { border-bottom-color: #222c39; }
+html.theme-dark tbody tr:hover { background: #1b2735; }
+/* 骨架屏 */
+html.theme-dark .sk { background: #1e2836; }
+html.theme-dark .sk::after { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .07), transparent); }
+html.theme-dark .spin { border-color: #33404f; border-top-color: var(--blue); }
+/* 主按钮: 深色下 --blue 变亮, 白字对比度不够 → 改深字 */
+html.theme-dark .btn.primary { color: #0b1220; }
+
+/* ============================================================
+   个股 K 线 + 大V观点(2026-09-23 搬「判断校验」的蜡烛图)
+   ------------------------------------------------------------
+   放在「个股信息」与「五个维度页签」之间 —— 全页签可见, 不随切页隐藏。
+   独立类名, 与主面板 style.css 隔离; 颜色走 var(--*) 令牌自动跟随主题,
+   canvas 内颜色由 app.js 的 CH / up/down 分主题处理。
+   ============================================================ */
+.kline-band { margin-top: 14px; }
+.kline-band .panel { margin-top: 0; }
+.vk-wrap { position: relative; height: 340px; }
+.vk-wrap canvas { width: 100% !important; height: 100% !important; display: block; }
+
+/* (原 .jline-ohlc / .jline-pop / .jlp-* 一套: 本页 K 线的右上角条与"点圆点浮出的意见卡" ——
+   2026-09-29 起统一到 static/votes_kline.css(与判断校验共一份), 本页只保留上面 :root 的 --vk-* 令牌。
+   这套交互(点开钉住 / 卡内可滚 / 右上角 ✕ / 触屏可点)现在是**全站唯一口径**, 改它改共用那份。)
+/* 多空/类型徽章 */
+.badge-dir, .badge-kind {
+  display: inline-flex; align-items: center; gap: 3px; padding: 1px 8px;
+  border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.badge-bull { background: rgba(217, 56, 46, .14); color: var(--red); }
+.badge-bear { background: rgba(26, 158, 92, .14); color: var(--green); }
+.badge-mention { background: rgba(217, 131, 36, .16); color: var(--orange); }
+.badge-kind { background: #eef1f6; color: var(--tx2); font-weight: 600; }
+html.theme-dark .badge-kind { background: #223041; }
+
+/* ============================================================
+   ⑤ 研报(2026-09-24) —— 目录 + 正文两栏, 正文样式挂在 .rpt-doc 里
+   类名一律 md-* 前缀, 不与本文件其它块冲突; 深色只在下面单列一段覆盖。
+   ============================================================ */
+a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+
+/* ---- 顶部: 设置(「设置」按钮展开的那一块: 定时更新 / 间隔 / 范围) ----
+   默认收起, 开合逻辑在 app.js setCfg() —— 用户 2026-09-24: "定时更新、间隔时间、范围等应放在设置里面" */
+.rpt-cfg {
+  background: #f7f9fd; border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 12px; margin-bottom: 12px;
+}
+.btn.ghost.cfg-off { color: var(--orange); }
+.rpt-auto { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--tx2); }
+.rpt-auto .sw { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.rpt-auto .sw input { width: 14px; height: 14px; accent-color: var(--blue); cursor: pointer; }
+.rpt-auto input[type=number] {
+  width: 62px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px;
+  font-size: 12px; color: var(--tx); background: #fff;
+}
+.rpt-auto select {
+  border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px;
+  font-size: 12px; color: var(--tx); background: #fff;
+}
+.rpt-auto .sep { color: var(--tx3); }
+.rpt-auto b { color: var(--tx); }
+
+/* ---- 顶部: 信息卡 ---- */
+.rpt-head {
+  border: 1px solid var(--line); border-radius: 10px; background: #fbfcfe;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.rpt-head .t { font-size: 15px; font-weight: 700; line-height: 1.4; }
+.rpt-head .meta { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--tx3); }
+.rpt-head .meta b { color: var(--tx2); font-weight: 600; }
+.rpt-head .ai { font-size: 12px; color: var(--tx2); line-height: 1.6; }
+.rpt-head .ai .ok { color: var(--green); }
+.rpt-head .ai .bad { color: var(--red); }
+.rpt-head .ai .run { color: var(--blue); }
+/* 信息卡 = 点一下收起/展开全文(目录+正文), 见 app.js applyFold() —— 用户 2026-09-24 */
+.rpt-head { cursor: pointer; }
+.rpt-head:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.rpt-head .t { display: flex; align-items: baseline; gap: 10px; }
+.rpt-head .fold-hint {
+  margin-left: auto; font-size: 11.5px; font-weight: 500; color: var(--tx3); white-space: nowrap;
+}
+
+/* ---- ① 最新机构研报(写在正文之后, 默认收起: 用户 2026-09-24 "点击展开再点击收回, 不然太占地方") ---- */
+.rpt-ext {
+  margin-top: 18px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcfe;
+}
+.rpt-ext > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; font-weight: 700; padding: 10px 13px;
+}
+.rpt-ext > summary::-webkit-details-marker { display: none; }
+.rpt-ext > summary::before {
+  content: "▸"; color: var(--tx3); font-size: 11px; transition: transform .15s;
+}
+.rpt-ext[open] > summary::before { transform: rotate(90deg); }
+.rpt-ext > summary .cnt { font-size: 12px; font-weight: 600; color: var(--blue); }
+.rpt-ext > summary .hint { font-size: 12px; font-weight: 500; color: var(--tx3); margin-left: auto; }
+.rpt-ext-body { padding: 0 13px 11px; }
+.rpt-ext-h {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; font-weight: 700; padding: 2px 2px 8px;
+}
+.rpt-ext-h .hint { font-size: 12px; font-weight: 500; color: var(--tx3); }
+.rpt-ext-h a { color: var(--blue); text-decoration: none; }
+.rpt-ext-row {
+  display: grid; grid-template-columns: 78px 86px 54px 1fr auto; gap: 10px; align-items: center;
+  padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px;
+  background: #fbfcfe; font-size: 12px; margin-bottom: 6px;
+}
+.rpt-ext-row .d { color: var(--tx3); }
+.rpt-ext-row .o { font-weight: 600; }
+.rpt-ext-row .r { color: var(--orange); font-weight: 600; }
+.rpt-ext-row .t { color: var(--tx2); line-height: 1.5; }
+.rpt-ext-row .lnk { display: inline-flex; gap: 8px; }
+.rpt-ext-row .lnk a {
+  color: var(--blue); text-decoration: none; font-weight: 600; white-space: nowrap;
+  border: 1px solid var(--line); border-radius: 7px; padding: 2px 9px;
+}
+.rpt-ext-row .lnk a:hover { background: #eef4fd; }
+.rpt-ext-empty { font-size: 12px; color: var(--tx3); padding: 6px 2px; }
+
+/* ---- 风险要点 ---- */
+.rpt-risks {
+  margin-top: 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: #fffaf5; padding: 9px 13px;
+}
+.rpt-risks summary { cursor: pointer; font-weight: 700; font-size: 12.5px; color: var(--red); }
+.rpt-risks summary .hint { font-weight: 500; color: var(--tx3); }
+.rpt-risks ul { margin: 9px 0 4px; padding-left: 20px; }
+.rpt-risks li { font-size: 12.5px; line-height: 1.75; color: var(--tx2); margin: 3px 0; }
+
+/* ---- 两栏: 目录 + 正文 ---- */
+.rpt-layout { display: grid; grid-template-columns: 236px 1fr; gap: 18px; margin-top: 14px; align-items: start; }
+/* ⛔ 这条不能删: 点信息卡收正文靠 el.hidden=true, 而 hidden 只是 UA 样式表里的 [hidden]{display:none}
+   —— **作者样式 .rpt-layout{display:grid} 优先级更高, 会把 hidden 顶掉**: 属性变了、提示文字也变了,
+   正文却纹丝不动(2026-09-24 用户"你加了, 但是点击没有反应")。同选择器 + 属性限定(0,2,0 > 0,1,0)才收得起来。 */
+.rpt-layout[hidden] { display: none; }
+@media (max-width: 900px) { .rpt-layout { grid-template-columns: 1fr; } .rpt-toc { position: static !important; max-height: none !important; } }
+.rpt-toc {
+  position: sticky; top: 76px; max-height: calc(100vh - 108px); overflow: auto;
+  border: 1px solid var(--line); border-radius: 10px; background: #fbfcfe; padding: 10px 8px;
+}
+.rpt-toc-h { font-size: 11px; font-weight: 700; color: var(--tx3); padding: 0 6px 8px; letter-spacing: .5px; }
+.rpt-toc a {
+  display: block; padding: 4px 6px; border-radius: 6px; font-size: 12px;
+  color: var(--tx2); text-decoration: none; line-height: 1.45;
+}
+.rpt-toc a:hover { background: #eef4fd; color: var(--blue); }
+.rpt-toc a.lv2 { font-weight: 600; color: var(--tx); }
+.rpt-toc a.lv3 { padding-left: 16px; }
+.rpt-toc a.lv4 { padding-left: 26px; }
+.rpt-toc a.on { background: #e6f0fd; color: var(--blue); }
+
+/* ---- 正文 ---- */
+.rpt-doc {
+  min-width: 0; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--card); padding: 4px 22px 28px;
+}
+.rpt-doc .md-h1, .rpt-doc .md-h2, .rpt-doc .md-h3,
+.rpt-doc .md-h4, .rpt-doc .md-h5, .rpt-doc .md-h6 { scroll-margin-top: 96px; line-height: 1.45; }
+.rpt-doc .md-h1 { font-size: 19px; margin: 18px 0 12px; }
+.rpt-doc .md-h2 {
+  font-size: 15.5px; margin: 26px 0 10px; padding: 7px 0 7px 11px;
+  border-left: 3px solid var(--blue); border-radius: 0 8px 8px 0;
+  background: linear-gradient(90deg, #eef4fd, transparent);
+}
+.rpt-doc .md-h3 { font-size: 14px; margin: 18px 0 8px; }
+.rpt-doc .md-h4, .rpt-doc .md-h5, .rpt-doc .md-h6 { font-size: 13px; margin: 14px 0 6px; color: var(--tx2); }
+.rpt-doc .md-p { margin: 8px 0; line-height: 1.85; font-size: 13px; }
+.rpt-doc .md-p.md-warn, .rpt-doc .md-p.md-good, .rpt-doc .md-p.md-key {
+  padding: 8px 12px; border-radius: 0 8px 8px 0; border-left: 3px solid var(--line);
+}
+.rpt-doc .md-p.md-warn { background: #fff5f5; border-left-color: var(--red); }
+.rpt-doc .md-p.md-good { background: #f2fbf6; border-left-color: var(--green); }
+.rpt-doc .md-p.md-key { background: #fffaf0; border-left-color: var(--orange); }
+.rpt-doc .md-quote {
+  margin: 10px 0; padding: 9px 14px; border-radius: 0 8px 8px 0;
+  border-left: 3px solid var(--line); background: #f7f9fd;
+  color: var(--tx2); font-size: 12.5px; line-height: 1.8;
+}
+.rpt-doc .md-quote.md-warn { border-left-color: var(--red); background: #fff5f5; }
+.rpt-doc .md-quote.md-good { border-left-color: var(--green); background: #f2fbf6; }
+.rpt-doc .md-quote.md-key { border-left-color: var(--orange); background: #fffaf0; }
+.rpt-doc .md-list { margin: 8px 0; padding-left: 22px; font-size: 13px; line-height: 1.85; }
+.rpt-doc .md-list li { margin: 3px 0; }
+.rpt-doc .md-li2 { list-style: circle; margin-left: 10px; }
+.rpt-doc .md-pre {
+  margin: 10px 0; padding: 10px 12px; overflow: auto; border-radius: 8px;
+  background: #f4f7fc; border: 1px solid var(--line); font-size: 12px; line-height: 1.5;
+  font-family: ui-monospace, Consolas, "Cascadia Mono", monospace;
+}
+.rpt-doc .md-tblwrap { margin: 10px 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+.rpt-doc .md-table { font-size: 12.5px; }
+.rpt-doc hr { border: none; border-top: 1px dashed var(--line); margin: 18px 0; }
+.rpt-doc b { color: var(--tx); }
+
+/* ---- 深色: 上面凡是用字面浅色底的地方, 这里逐条换掉 ---- */
+html.theme-dark .rpt-cfg,
+html.theme-dark .rpt-toc,
+html.theme-dark .rpt-ext,
+html.theme-dark .rpt-ext-row,
+html.theme-dark .rpt-head { background: #18212d; }
+html.theme-dark .rpt-auto input[type=number],
+html.theme-dark .rpt-auto select { background: #1d2734; }
+html.theme-dark .rpt-toc a:hover { background: #223047; }
+html.theme-dark .rpt-toc a.on { background: #1b2c46; }
+html.theme-dark .rpt-doc .md-h2 { background: linear-gradient(90deg, #1b2c46, transparent); }
+html.theme-dark .rpt-doc .md-quote { background: #1b2431; }
+html.theme-dark .rpt-doc .md-pre { background: #1b2431; }
+html.theme-dark .rpt-doc .md-p.md-warn,
+html.theme-dark .rpt-doc .md-quote.md-warn { background: #2a1c20; }
+html.theme-dark .rpt-doc .md-p.md-good,
+html.theme-dark .rpt-doc .md-quote.md-good { background: #16261f; }
+html.theme-dark .rpt-doc .md-p.md-key,
+html.theme-dark .rpt-doc .md-quote.md-key { background: #2a2318; }
+html.theme-dark .rpt-risks { background: #241b16; }
+html.theme-dark .rpt-ext-row .lnk a:hover { background: #223047; }
+
+/* ============================================================
+   ① 基本面右侧「财务预测」(2026-09-24)
+   ------------------------------------------------------------
+   用户的原话是"基本面吃的是历史报表" —— 这块把 营收/净利 前瞻一年, 并按同一套分档表
+   算出**影子分 F′** 与左边的 F 并排。⚠️ F′ 不进模块1 的评分与建议(见 dash_core/forecast.py)。
+   左列 F 是模块1 唯一的那个 F(已披露财报口径); 右列 F′ 只是**拿预测输入代进同一套分档表的对照分**
+   (2026-09-26 起"AI 可信度 >70% 就把 F 换成预测口径"的开关已删, 所以两列永远是两套数、不同源)。
+   两列之间只画一条淡分隔, 不做卡片, 免得看着像两套系统。窄屏(.split2 已塌成单列)时把分隔换成上边线。
+   ============================================================ */
+.fc-tag {
+  margin-left: 8px; padding: 1px 7px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  background: #eef4fc; color: #2c66b8; vertical-align: 2px;
+}
+@media (min-width: 861px) {
+  .fc-col { border-left: 1px dashed var(--line); padding-left: 18px; }
+}
+@media (max-width: 860px) {
+  .fc-col { border-top: 1px dashed var(--line); padding-top: 14px; margin-top: 4px; }
+}
+.fc-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fc-kpi { background: #fafcff; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; }
+.fc-kpi .k { font-size: 11px; color: var(--tx3); margin-bottom: 3px; }
+.fc-kpi .v { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.fc-kpi .v .u { font-size: 11px; font-weight: 600; color: var(--tx3); margin-left: 2px; }
+.fc-kpi .v.up { color: var(--red); }        /* A股语义: 涨/增长 = 红 */
+.fc-kpi .v.down { color: var(--green); }
+.fc-kpi .d { font-size: 11px; color: var(--tx2); margin-top: 3px; line-height: 1.5; }
+.fc-tip { font-size: 11.5px; color: var(--tx3); line-height: 1.7; margin: 8px 0 0; }
+.fc-tip b { color: var(--tx2); }
+.fc-srow { display: grid; grid-template-columns: 58px 1fr 92px; align-items: center; gap: 10px; font-size: 12px; margin: 7px 0; }
+.fc-srow .sl { color: var(--tx2); }
+.fc-srow .sb { position: relative; height: 15px; background: #eef1f6; border-radius: 4px; overflow: hidden; }
+.fc-srow .sb i { position: absolute; left: 0; display: block; border-radius: 3px; }
+.fc-srow .sb i.hist { top: 2px; height: 4px; background: #a8b3c1; }
+.fc-srow .sb i.fwd { bottom: 2px; height: 4px; background: var(--blue); }
+.fc-srow .sv { text-align: right; font-variant-numeric: tabular-nums; color: var(--tx3); }
+.fc-srow .sv b { font-weight: 700; }
+.fc-cav { margin: 12px 0 0; padding: 10px 12px 10px 26px; background: #fffaf0; border: 1px solid #f2e2c4; border-radius: 10px; }
+.fc-cav li { font-size: 12px; color: #8a5a12; line-height: 1.75; }
+.fc-cav li + li { margin-top: 4px; }
+.fc-det { margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; background: #fafcff; }
+.fc-det > summary {
+  cursor: pointer; list-style: none; font-size: 12.5px; font-weight: 700; color: var(--tx2);
+  padding: 9px 0; outline: none;
+}
+.fc-det > summary::-webkit-details-marker { display: none; }
+.fc-det > summary::before { content: "▸ "; color: var(--tx3); }
+.fc-det[open] > summary::before { content: "▾ "; }
+.fc-det[open] > summary { border-bottom: 1px solid var(--line); }
+.fc-rows { margin-top: 4px; }
+.fc-r { display: grid; grid-template-columns: 96px 1fr; gap: 10px; font-size: 12px; padding: 5px 0; border-bottom: 1px dashed var(--line); }
+.fc-r:last-child { border-bottom: none; }
+.fc-r .rl { color: var(--tx3); }
+.fc-r .rv { color: var(--tx2); line-height: 1.65; }
+.fc-conf { font-size: 12px; color: var(--tx2); margin: 8px 0 4px; }
+.fc-conf b { color: var(--tx); }
+.fc-cn { display: block; font-size: 11px; color: var(--tx3); margin-top: 2px; }
+/* 年报表里的同比列: A股语义 涨=红 跌=绿。⚠️ 刻意带 .fc- 前缀而不是写裸 .up/.down ——
+   裸类名会命中本页其它用 up/down 的元素(大V观点的 .badge-dir.up、K线的 .jm-ch.up), 那是别的颜色规则。 */
+.fc-yoy.up { color: var(--red); }
+.fc-yoy.down { color: var(--green); }
+
+/* ---- 深色: 上面用字面浅色底的三条卡片/轨道/提示, 逐条换掉(与 .rpt-* 同一做法) ---- */
+html.theme-dark .fc-tag { background: #1b2c46; color: var(--on-tint-blue); }
+html.theme-dark .fc-kpi,
+html.theme-dark .fc-det { background: #18212d; }
+html.theme-dark .fc-srow .sb { background: #223041; }
+html.theme-dark .fc-srow .sb i.hist { background: #55637a; }
+html.theme-dark .fc-cav { background: #2a2318; border-color: #43371f; }
+html.theme-dark .fc-cav li { color: var(--orange); }
+
+/* ---------- 财务预测 · 机构研报预测 + AI 复核(2026-09-24 加, 2026-09-26 改口径) ---------- */
+/* 逐家研报列表: 机构 / 评级 / 日期 / 标题(可点原文) */
+.fc-inst-row { display: grid; grid-template-columns: 66px 42px 68px 1fr; gap: 8px; font-size: 11.5px; padding: 3px 0; border-top: 1px dashed var(--line); }
+.fc-inst-row .o { color: var(--tx2); font-weight: 600; }
+.fc-inst-row .rr { color: var(--blue); }
+.fc-inst-row .dd { color: var(--tx3); }
+.fc-inst-row .tt { color: var(--tx2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-inst-row .tt a { color: var(--tx2); text-decoration: none; }
+.fc-inst-row .tt a:hover { color: var(--blue); text-decoration: underline; }
+.fc-inst-list { margin-top: 5px; }
+/* AI 复核卡(2026-09-26 改口径): 不再有 "/100 的大数字" 与阈值文案, 只剩
+   一枚三态结论章(可用/谨慎/不可用) + 一段推导逻辑 + 风险点 + 复核按钮。
+   结论章的颜色是**语义**不是装饰: 绿=可用 / 橙=谨慎 / 红=不可用。 */
+.fc-rev { background: #f7f9fd; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 6px; }
+.fc-rev .verdict { display: inline-block; margin-bottom: 5px; padding: 1px 9px; border-radius: 20px;
+  font-size: 11.5px; font-weight: 700; background: #eef2f8; color: var(--tx2); }
+.fc-rev .verdict.ok { background: #e8f5ec; color: var(--green); }
+.fc-rev .verdict.warn { background: #fdf6ec; color: var(--orange); }
+.fc-rev .verdict.bad { background: #fdecec; color: var(--red); }
+.fc-rev .lg { font-size: 12.5px; color: var(--tx2); line-height: 1.75; }
+.fc-rev .lg.none { color: var(--tx3); }
+.fc-rev .rk { font-size: 11.5px; color: var(--orange); line-height: 1.75; margin-top: 4px; }
+.fc-rev .ft { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.fc-rev .ft .when { font-size: 11.5px; color: var(--tx3); }
+.btn.tiny { font-size: 11.5px; padding: 2px 10px; min-height: 24px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
+/* ⛔ 2026-09-26 删: `.fc-tag.live`(F′ 已生效时把"影子对照"章变绿) —— 那个门已删, 章永远是"影子对照"。 */
+html.theme-dark .fc-rev { background: #1b2534; border-color: #2b3a4f; }
+html.theme-dark .fc-rev .verdict { background: #223047; }
+html.theme-dark .fc-rev .verdict.ok { background: #14301f; color: #3ecf8e; }
+html.theme-dark .fc-rev .verdict.warn { background: #2a2318; }
+html.theme-dark .fc-rev .verdict.bad { background: #331b1d; }
+html.theme-dark .fc-inst-row { border-top-color: #263346; }
+
+/* 「大V净看空」横幅(2026-09-25 用户口径): 只提示, 不影响评分 —— 禁止建仓 / 建议清仓。 */
+.netbear-banner{margin:0 0 12px;padding:10px 12px;border-radius:10px;line-height:1.6;
+  background:color-mix(in srgb,#ef4444 12%,transparent);border:1px solid color-mix(in srgb,#ef4444 35%,transparent);color:#b91c1c}
+.netbear-banner .nb-dim{display:block;margin-top:4px;font-size:12px;opacity:.85}
+html.theme-dark .netbear-banner{background:color-mix(in srgb,#ef4444 16%,transparent);color:#fecaca}
+
+/* ===== 近期事件芯片(2026-09-30 用户需求) =====
+   位置: 顶栏「中孚实业 [600595 · A股]」这一串的右边。
+   视觉刻意做得比 F/T/P/V 分数芯片"轻"(虚线边 + 小字 + 半透明底): 这份日期的**来源是 AI 推算**
+   (后端把已知事实喂给「设置」里的模型, 由它判断哪些事件相关、大概什么时候), 不是交易所公告,
+   所以不能长得像官宣。鼠标停上去有 title 写明日期/窗口/AI 置信度。
+  颜色 = **重要度**, 不是买卖方向: high 红 / mid 橙 / low 灰。
+  ⚠️ 2026-09-30 用户口径(改过一次): 原来是**每条一个芯片并排**(中孚实业会显示
+     「还有 15 天 三季报业绩预告(如触发)」+「还有 31 天 2026三季报披露」), 用户说"两条列一起好丑,
+     不如跟首页的一样采用轮播" → 现在这一格**一次只放一条**、8 秒换一条(JS 见 renderSymEvents),
+     所以下面的 .ev-chip 不再需要 gap(永远只有一个孩子), 而 .ev-one 拿到了换条的淡入动画。 */
+.ev-chip { display: inline-flex; align-items: center; min-width: 0; overflow: hidden; }
+.ev-chip[hidden] { display: none; }
+.ev-one {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  padding: 2px 9px 2px 7px; border-radius: 20px; white-space: nowrap; max-width: 300px;
+  font-size: 11.5px; line-height: 1.6; cursor: default;
+  border: 1px dashed var(--line); background: #f7f9fd; color: var(--tx2);
+}
+.ev-one .ev-ico { width: 13px; height: 13px; flex: none; opacity: .8; }
+.ev-one em { font-style: normal; font-weight: 700; color: var(--tx3); flex: none; }
+.ev-one b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.ev-one.imp-high { border-color: color-mix(in srgb, var(--red) 45%, transparent); color: #b91c1c;
+  background: color-mix(in srgb, var(--red) 8%, transparent); }
+.ev-one.imp-high em { color: #b91c1c; }
+.ev-one.imp-mid { border-color: color-mix(in srgb, var(--orange) 45%, transparent); color: #a1480a;
+  background: color-mix(in srgb, var(--orange) 8%, transparent); }
+.ev-one.imp-mid em { color: #a1480a; }
+html.theme-dark .ev-one { background: #1b2534; border-color: #2b3a4f; }
+html.theme-dark .ev-one.imp-high { color: #fca5a5; }
+html.theme-dark .ev-one.imp-high em { color: #fca5a5; }
+html.theme-dark .ev-one.imp-mid { color: #fbbf24; }
+html.theme-dark .ev-one.imp-mid em { color: #fbbf24; }
+/* 换条时的淡入(8 秒一次, 只动这一格; 与首页那一格同一套做法) */
+.ev-one.ev-in { animation: evIn .45s ease both; }
+@keyframes evIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ev-one.ev-in { animation: none; } }
+/* 顶栏本来就挤(左边名称+代码, 右边一排行情的 5 块) —— 窗口窄下来先收窄芯片,
+   再窄就整块收起, 绝不把 .meta 那排挤到换行去。只放一条之后余量宽裕了, 所以放宽一档。 */
+@media (max-width: 1380px) { .ev-one { max-width: 200px; } }
+@media (max-width: 1100px) { .ev-chip { display: none; } }
